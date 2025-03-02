@@ -301,12 +301,12 @@ const razorpay = new Razorpay({
   key_secret: 'qUxFqXVXmy8CttXEorqE6Kor',
 });
 
-app.post("/create-order", async (req, res) => {
+app.post("/create-order-razorpay", async (req, res) => {
   try {
     const { amount, currency } = req.body;
 
     const options = {
-      amount: amount * 100, // Convert to paise
+      amount: amount * 100, 
       currency,
       receipt: `order_rcptid_${Math.floor(Math.random() * 100000)}`,
     };
@@ -318,6 +318,63 @@ app.post("/create-order", async (req, res) => {
     res.status(500).json({ error: "Failed to create order" });
   }
 });
+
+
+app.post("/create-order-instamojo", async (req, res) => {
+  try {
+    const {
+      amount,
+      honorific,
+      first_name,
+      middle_name,
+      last_name,
+      email,
+      phone,
+      packages, 
+    } = req.body;
+
+    const INSTAMOJO_API_KEY = "0cb75fd5924ef24ef42dd7a202a4d773";
+    const INSTAMOJO_AUTH_TOKEN = "432d3e19bdcf4f6fc0d2f4e71674f868";
+    const INSTAMOJO_API_URL = "https://www.instamojo.com/api/1.1/payment-requests/";
+
+    const buyerName = `${honorific || ""} ${first_name} ${middle_name || ""} ${last_name}`.trim();
+
+    // Use package titles directly in purpose
+    const paymentData = {
+      purpose: `Kisar 2025 - Packages: ${packages.join(", ")}`, // Join titles into a string
+      amount: '10',
+      buyer_name: buyerName,
+      email: email,
+      phone: phone,
+      redirect_url: "/payment-success",
+      webhook: "/webhook",
+      send_email: true,
+      send_sms: true,
+      allow_repeated_payments: false,
+    };
+
+    const response = await axios.post(INSTAMOJO_API_URL, paymentData, {
+      headers: {
+        "X-Api-Key": INSTAMOJO_API_KEY,
+        "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+
+    // Return JSON with payment URL for client-side redirect
+    res.json({
+      payment_request: {
+        id: response.data.payment_request.id,
+        url: response.data.payment_request.longurl,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating Instamojo payment request:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to create payment request" });
+  }
+});
+
+
 
 
 // Verify Payment & Store Registration
@@ -401,36 +458,54 @@ app.delete("/api/registrations/remove/:id", (req, res) => {
 app.get("/api/packages", async (req, res) => {
   try {
     const packages = await query("SELECT * FROM packages");
+    console.log(packages);
     res.json(packages);
   } catch (error) {
+    console.error(error)
     res.status(500).json({ error: "Error fetching packages" });
   }
 });
 
 // Add a new package
 app.post("/api/packages/add", async (req, res) => {
-  const { name, description, price } = req.body;
+  const { name, description, price, active = true, type = "MAIN" } = req.body;
+
   if (!name || !price) {
     return res.status(400).json({ error: "Package name and price are required" });
   }
 
   try {
-    await query("INSERT INTO packages (name, description, price) VALUES (?, ?, ?)", [name, description || null, price]);
+    await query(
+      "INSERT INTO packages (name, description, price, active, type) VALUES (?, ?, ?, ?, ?)",
+      [name, description || null, price, active, type]
+    );
     res.json({ message: "Package added successfully" });
   } catch (error) {
+    console.error("Error adding package:", error);
     res.status(500).json({ error: "Error adding package" });
   }
 });
 
 // Update a package
 app.put("/api/packages/edit/:id", async (req, res) => {
-  const { name, description, price } = req.body;
+  const { name, description, price, active, type } = req.body;
   const { id } = req.params;
 
+  if (!name || !price) {
+    return res.status(400).json({ error: "Package name and price are required" });
+  }
+
   try {
-    await query("UPDATE packages SET name = ?, description = ?, price = ? WHERE id = ?", [name, description || null, price, id]);
+    const result = await query(
+      "UPDATE packages SET name = ?, description = ?, price = ?, active = ?, type = ? WHERE id = ?",
+      [name, description || null, price, active, type, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Package not found" });
+    }
     res.json({ message: "Package updated successfully" });
   } catch (error) {
+    console.error("Error updating package:", error);
     res.status(500).json({ error: "Error updating package" });
   }
 });
