@@ -1,0 +1,453 @@
+const express = require("express");
+const mysql = require("mysql2");
+const app = express();
+const bodyParser = require("body-parser");
+const cors = require("cors");
+const cookieParser = require("cookie-parser");
+const session = require("express-session");
+const bcrypt = require('bcryptjs');
+const saltRounds = 10;
+const jwt = require("jsonwebtoken");
+const multer = require("multer");
+const path = require("path");
+const PORT = process.env.PORT || 5000;
+const axios = require('axios');
+const cheerio = require('cheerio');
+const querystring = require('querystring');
+const nodemailer = require('nodemailer');
+const request = require('request');
+const webpush = require('web-push');
+const crypto = require('crypto');
+const cron = require('node-cron');
+const schedule = require("node-schedule");
+const pdfParse = require('pdf-parse');
+const fs = require('fs');
+const webPush = require('web-push');
+const Razorpay = require('razorpay');
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
+const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
+const safetySettings = [
+  {
+    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+    threshold: HarmBlockThreshold.BLOCK_NONE,
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+    threshold: HarmBlockThreshold.BLOCK_NONE
+  },
+  {
+    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+    threshold: HarmBlockThreshold.BLOCK_NONE
+  }
+];
+
+const model = genAI.getGenerativeModel({
+  model: "gemini-2.0-flash",
+  safetySettings: safetySettings,
+  systemInstruction: "You are Edusify, an AI-powered productivity assistant designed to help students manage their academic tasks, study materials, and stay organized. Your mission is to provide tailored assistance and streamline the study experience with a wide range of features.\n\n" +
+  
+  "- **Sticky Notes**: Users can quickly add sticky notes on the dashboard by clicking 'Add Note'. They can input a title, optional description, and select the note color. Notes are saved for easy access and organization. The dashboard also displays today's tasks and events.\n" +
+  
+  "- **AI Assistant**: Edusify helps users by generating notes, quizzes, and even adding AI responses directly to their notes with the 'Magic' feature. Users can click on the 'Magic' button to generate content like quizzes and notes from their AI response and add that content to their study materials.\n" +
+  
+  "- **To-Do List**: The To-Do List helps users manage their tasks more efficiently. Tasks can be created with a title, description, due date, priority level, and email reminders. AI can even generate tasks based on user input or upcoming deadlines.\n" +
+  
+  "- **Notes**: Users can create notes by going to the 'Notes' section and clicking 'Create Notes'. They can input a name and description for the note, select a subject category, and optionally add images. Notes are customizable and can be saved for future reference. Additionally, users can generate flashcards and quizzes from their notes for better retention.\n" +
+  
+  "- **Flashcards**: Users can create flashcards manually, from AI-generated content, or by uploading PDFs. When uploading PDFs, Edusify extracts text and generates relevant flashcards. Flashcards can be customized, saved, and studied.\n" +
+  
+  "- **Rooms**: Rooms allow users to create or join study groups where they can share resources, track each other's progress, and collaborate on projects. Rooms help create a sense of community for focused learning.\n" +
+  
+  "- **Quizzes**: Users can generate quizzes manually, with AI, or from PDFs. AI can help generate relevant quiz questions based on the user's study material, and quizzes can be shared with others for collaborative learning.\n" +
+  
+  "- **Document Locker**: A secure space where students can store important documents with the option to add password protection for extra security.\n" +
+  
+  "- **Calendar**: Users can track important dates like exams, assignments, and events, keeping their schedule organized and well-managed.\n" +
+  
+  "- **Pomodoro Timer**: The Pomodoro Timer helps users maintain focus with study sessions and breaks. It tracks study and break times, allowing users to monitor their productivity and download stats for social sharing.\n\n" +
+  
+  "When responding to user requests related to schedules, tasks, or notes, generate a general plan or summary based on the provided input without asking for too many details. If the user provides a broad topic, generate a summary note instead of requesting more specifics. If the user requires changes, wait for their feedback and adjust accordingly. Keep the flow of conversation smooth and focused on providing immediate value, not excessive clarifications."
+});
+
+
+
+
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+app.use(cookieParser());
+
+app.use(session({
+  key: "userId",
+  secret: "Englishps4",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    expires: 60 * 60 * 24 * 12,
+  },
+}));
+
+app.use(cors({
+  origin: "*", // Allows requests from any origin
+  methods: ["GET", "POST", "DELETE", "PUT"],
+  credentials: true, // Allows cookies to be sent
+}));
+
+
+// Define storage for multer
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+      cb(null, 'public/');
+  },
+  filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname);
+      cb(null, Date.now() + ext); // Append timestamp to filename to avoid collisions
+  },
+});
+
+
+// File filter function
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+  if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+  } else {
+      cb(new Error('Invalid file type'), false);
+  }
+};
+
+
+const upload = multer({
+  storage,
+  fileFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Limit file size to 5 MB
+});
+
+
+// Serve static files from the 'public' directory
+app.use(express.static(path.join(__dirname, 'public')));
+
+const connection = mysql.createPool({
+  connectionLimit: 10, // Maximum number of connections in the pool
+  host: "localhost",
+  user: "root",
+  password: "Englishps#4",
+  database: "kisar",
+});
+
+connection.getConnection((err) => {
+  if (err) {
+    console.error("Error connecting to MySQL database: ", err);
+  } else {
+    console.log("Connected to MySQL database");
+  }
+});
+
+// Promisify query function
+const query = (sql, params) => {
+  return new Promise((resolve, reject) => {
+    connection.query(sql, params, (error, results) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+};
+
+const MAX_RETRIES = 10;
+
+// Helper function to introduce a delay (in milliseconds
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+
+app.post("/api/kisar/chat", async (req, res) => {
+  const { message, chatHistory } = req.body;
+
+  try {
+    // Validate required inputs
+    if (!message || typeof message !== 'string' || message.trim() === '') {
+      return res.status(400).json({ error: 'Message cannot be empty.' });
+    }
+
+    // Build dynamic system instruction
+    const dynamicSystemInstruction = `
+      You are an AI chatbot designed to assist customers with questions about the KISAR 2025 event registration process. Your purpose is to provide accurate, friendly, and helpful answers based on the event registration quotation prepared on February 25, 2025, for KISAR. Use the information below to respond to customer inquiries. Always aim to be clear, concise, and polite. If a question falls outside this information, let the user know you don’t have that detail and suggest they contact KISAR directly.
+
+Event Registration App Overview
+What it is: This is a custom-built app for KISAR 2025 event registrations, costing ₹65,000 to develop. It includes a registration form, payment system (via Razorpay), email receipts, admin dashboard, setup/testing, and hosting until registrations close on May 16, 2025.
+Optional feature: An AI chatbot (like you!) can be added for ₹10,000 to answer customer questions.
+Hosting duration: The app stays online until May 16, 2025, covering the entire registration period.
+How It Works for Customers
+Customers use the app to sign up for the event by filling out a registration form and paying online via Razorpay.
+After payment, they receive a "thank you" email with payment details.
+KISAR manages everything through an admin dashboard, seeing sign-ups and package details.
+Payments include the package price plus a small Razorpay fee (2% of the package price + 18% GST on that fee), which customers pay. KISAR receives the full package price.
+Customer Pricing Details
+There are two pricing periods: Early Bird (before March 31, 2025) and Late/Spot (April 1, 2025, to May 16, 2025). Below are the packages, what customers pay (including fees), and what KISAR gets.
+
+Early Bird Pricing (Before March 31, 2025):
+
+Package	Base Price (₹)	Razorpay Fee (2%)	GST on Fee (18%)	Total Customer Pays (₹)	Amount KISAR Gets (₹)
+Non Residential Early Bird	8,500	170	30.60	8,700.60	8,500
+Residential, Single, 1 Day	15,000	300	54.00	15,354.00	15,000
+Residential, Single, 2 Days	21,500	430	77.40	22,007.40	21,500
+Residential, Double, 1 Day	16,000	320	57.60	16,377.60	16,000
+Residential, Double, 2 Days	21,500	430	77.40	22,007.40	21,500
+Residential, 2 Sharing, 1 Day	13,000	260	46.80	13,306.80	13,000
+Residential, 2 Sharing, 2 Days	17,000	340	61.20	17,401.20	17,000
+Extra Bed	Charged on spot	-	-	-	-
+Late/Spot Pricing (April 1, 2025, to May 16, 2025):
+
+Package	Base Price (₹)	Razorpay Fee (2%)	GST on Fee (18%)	Total Customer Pays (₹)	Amount KISAR Gets (₹)
+Non Residential Late/Spot	10,500	210	37.80	10,747.80	10,500
+Residential, Single, 1 Day	18,000	360	64.80	18,424.80	18,000
+Residential, Single, 2 Days	26,500	530	95.40	27,125.40	26,500
+Residential, Double, 1 Day	19,000	380	68.40	19,448.40	19,000
+Residential, Double, 2 Days	26,500	530	95.40	27,125.40	26,500
+Residential, 2 Sharing, 1 Day	15,000	300	54.00	15,354.00	15,000
+Residential, 2 Sharing, 2 Days	20,000	400	72.00	20,472.00	20,000
+Extra Bed	Charged on spot	-	-	-	-
+Notes on Fees:
+
+Razorpay charges 2% of the package price, plus 18% GST on that fee. This is added to the base price and paid by the customer.
+Example: For ₹8,500 package, customer pays ₹8,700.60 (₹8,500 + ₹170 fee + ₹30.60 GST), and KISAR gets ₹8,500.
+Fees might slightly vary in real-time, but changes are rare.
+Key Dates
+Early Bird Deadline: March 31, 2025 – Lower prices apply before this date.
+Registration Closes: May 16, 2025 – Last day to sign up through the app.
+Today’s date is February 26, 2025, so Early Bird pricing is currently active.
+How to Answer Common Questions
+“How much does it cost to register?”
+Check the customer’s preferred package and timing (Early Bird or Late/Spot). Share the “Total Customer Pays” amount from the tables above. Example: “The Non Residential Early Bird package costs ₹8,700.60, including fees, if you register before March 31, 2025.”
+“What’s included in the price?”
+Explain that the base price covers their event package, and the extra is a Razorpay fee (2% + GST). KISAR gets the full base price. Example: “For ₹15,000 Residential Single 1 Day, you pay ₹15,354 total. The ₹354 is a payment fee; KISAR gets ₹15,000.”
+“How do I register?”
+Tell them to use the KISAR 2025 event app, fill out the registration form, and pay online. They’ll get an email receipt after.
+“When’s the deadline?”
+Early Bird ends March 31, 2025; final registration deadline is May 16, 2025.
+“What’s an Extra Bed?”
+Say it’s an option charged on-site, not through the app. Suggest contacting KISAR for details.
+“Why is my price higher than the base price?”
+Explain the Razorpay fee: “The base price is what KISAR receives, but there’s a 2% fee plus 18% GST added for online payments, which you cover.”
+Guidelines for Responses
+Be friendly and patient: “Happy to help! Here’s what you need to know…”
+Use the exact numbers from the tables when possible.
+If unsure, say: “I don’t have that info right now, but you can reach out to KISAR directly for more details.”
+Avoid guessing or making up answers.
+Now, go ahead and assist customers with their KISAR 2025 registration questions!
+    `;
+
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.0-flash",
+      safetySettings: safetySettings,
+      systemInstruction: dynamicSystemInstruction
+    });
+
+    const initialChatHistory = [
+      { role: 'user', parts: [{ text: 'Hello' }] },
+      { role: 'model', parts: [{ text: 'Great to meet you. What would you like to know?' }] },
+    ];
+
+    const chat = model.startChat({ history: chatHistory || initialChatHistory });
+
+    console.log('User asked:', message);
+
+    let aiResponse = '';
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Attempt to send message to AI
+        const result = await chat.sendMessage(message);
+        aiResponse = result.response?.text?.() || 'No response from AI.';
+        console.log(`AI responded on attempt ${attempt}`);
+        break; // Exit loop if successful
+      } catch (error) {
+        console.error(`Attempt ${attempt} failed:`, error.message);
+
+        if (attempt === MAX_RETRIES) {
+          throw new Error('AI service failed after multiple attempts.');
+        }
+
+        // Exponential backoff delay (2^attempt * 100 ms)
+        const delayMs = Math.pow(2, attempt) * 100;
+        console.log(`Retrying in ${delayMs}ms...`);
+        await delay(delayMs);
+      }
+    }
+
+    if (!aiResponse || aiResponse === 'No response from AI.') {
+      return res.status(500).json({ error: 'AI service did not return a response.' });
+    }
+
+
+    res.json({ response: aiResponse });
+  } catch (error) {
+    console.error('Error in /api/chat/ai endpoint:', error);
+
+    res.status(500).json({ error: 'An error occurred while processing your request. Please try again later.' });
+  }
+});
+
+
+// Razorpay setup
+const razorpay = new Razorpay({
+  key_id: 'rzp_test_RerVxaTytL17Ax',
+  key_secret: 'qUxFqXVXmy8CttXEorqE6Kor',
+});
+
+app.post("/create-order", async (req, res) => {
+  try {
+    const { amount, currency } = req.body;
+
+    const options = {
+      amount: amount * 100, // Convert to paise
+      currency,
+      receipt: `order_rcptid_${Math.floor(Math.random() * 100000)}`,
+    };
+
+    const order = await razorpay.orders.create(options);
+    res.json({ order });
+  } catch (error) {
+    console.error("Error creating order:", error);
+    res.status(500).json({ error: "Failed to create order" });
+  }
+});
+
+
+// Verify Payment & Store Registration
+app.post("/verify-payment", async (req, res) => {
+  try {
+    const { payment_id, order_id, signature, name, email, phone } = req.body;
+
+    // Verify payment signature
+    const body = `${order_id}|${payment_id}`;
+    const expected_signature = crypto
+      .createHmac("sha256", "qUxFqXVXmy8CttXEorqE6Kor") // Razorpay secret key
+      .update(body)
+      .digest("hex");
+
+    if (expected_signature !== signature) {
+      return res.status(400).json({ success: false, message: "Payment verification failed" });
+    }
+
+    // Store registration details in database
+    const queryText = `
+      INSERT INTO event_registrations (name, email, phone, payment_id, payment_status, payment_date)
+      VALUES (?, ?, ?, ?, 'success', NOW())
+    `;
+
+    await query(queryText, [name, email, phone, payment_id]);
+    res.json({ success: true, message: "Registration successful!" });
+  } catch (error) {
+    console.error("Error in verify-payment:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// API to fetch registrations with search & filter
+app.get("/api/registrations", (req, res) => {
+  let { search, payment_status } = req.query;
+  let sql = "SELECT * FROM event_registrations WHERE 1=1";
+
+  if (search) {
+    sql += ` AND (name LIKE '%${search}%' OR email LIKE '%${search}%' OR phone LIKE '%${search}%' OR payment_id LIKE '%${search}%')`;
+  }
+
+  if (payment_status) {
+    sql += ` AND payment_status = '${payment_status}'`;
+  }
+
+  connection.query(sql, (err, results) => {
+    if (err) {
+      return res.status(500).json({ error: "Database query error" });
+    }
+    res.json(results);
+  });
+});
+
+app.put("/api/registrations/edit/:id", (req, res) => {
+  let { name, email, phone, payment_id, payment_status, payment_date } = req.body;
+
+  // Convert ISO date to MySQL-compatible format
+  payment_date = new Date(payment_date).toISOString().slice(0, 19).replace("T", " ");
+
+  connection.query(
+    "UPDATE event_registrations SET name=?, email=?, phone=?, payment_id=?, payment_status=?, payment_date=? WHERE id=?",
+    [name, email, phone, payment_id, payment_status, payment_date, req.params.id],
+    (err) => {
+      if (err) return res.status(500).json({ error: "Update failed", details: err.message });
+      res.json({ message: "User updated successfully" });
+    }
+  );
+});
+
+
+// Delete Registration
+app.delete("/api/registrations/remove/:id", (req, res) => {
+  connection.query("DELETE FROM event_registrations WHERE id=?", [req.params.id], (err) => {
+    if (err) return res.status(500).json({ error: "Delete failed" });
+    res.json({ message: "User deleted successfully" });
+  });
+});
+
+
+// Get all packages
+app.get("/api/packages", async (req, res) => {
+  try {
+    const packages = await query("SELECT * FROM packages");
+    res.json(packages);
+  } catch (error) {
+    res.status(500).json({ error: "Error fetching packages" });
+  }
+});
+
+// Add a new package
+app.post("/api/packages/add", async (req, res) => {
+  const { name, description, price } = req.body;
+  if (!name || !price) {
+    return res.status(400).json({ error: "Package name and price are required" });
+  }
+
+  try {
+    await query("INSERT INTO packages (name, description, price) VALUES (?, ?, ?)", [name, description || null, price]);
+    res.json({ message: "Package added successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Error adding package" });
+  }
+});
+
+// Update a package
+app.put("/api/packages/edit/:id", async (req, res) => {
+  const { name, description, price } = req.body;
+  const { id } = req.params;
+
+  try {
+    await query("UPDATE packages SET name = ?, description = ?, price = ? WHERE id = ?", [name, description || null, price, id]);
+    res.json({ message: "Package updated successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Error updating package" });
+  }
+});
+
+// Delete a package
+app.delete("/api/packages/remove/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query("DELETE FROM packages WHERE id = ?", [id]);
+    res.json({ message: "Package deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Error deleting package" });
+  }
+});
+
+// Start the server
+app.listen(PORT, () => {
+  console.log(`Server is running on port ${PORT}`);
+});
+
