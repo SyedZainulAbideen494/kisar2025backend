@@ -330,7 +330,14 @@ app.post("/create-order-instamojo", async (req, res) => {
       last_name,
       email,
       phone,
-      packages, 
+      address,
+      city,
+      state,
+      pincode,
+      med_council_number,
+      category,
+      type,
+      package_ids, 
     } = req.body;
 
     const INSTAMOJO_API_KEY = "0cb75fd5924ef24ef42dd7a202a4d773";
@@ -339,15 +346,22 @@ app.post("/create-order-instamojo", async (req, res) => {
 
     const buyerName = `${honorific || ""} ${first_name} ${middle_name || ""} ${last_name}`.trim();
 
-    // Use package titles directly in purpose
+    const packageQuery = `
+      SELECT name
+      FROM packages
+      WHERE id IN (?)
+    `;
+    const packageResult = await query(packageQuery, [package_ids]);
+    const packageTitles = packageResult.map((row) => row.name);
+
     const paymentData = {
-      purpose: `Kisar 2025 - Packages: ${packages.join(", ")}`, // Join titles into a string
-      amount: '10',
+      purpose: `Packages: ${packageTitles.join(", ")}`, 
+      amount: amount,
       buyer_name: buyerName,
       email: email,
       phone: phone,
-      redirect_url: "/payment-success",
-      webhook: "/webhook",
+      redirect_url: "http://localhost:3000/payment-success",
+      webhook: "http://localhost:5000/webhook",
       send_email: true,
       send_sms: true,
       allow_repeated_payments: false,
@@ -361,7 +375,34 @@ app.post("/create-order-instamojo", async (req, res) => {
       },
     });
 
-    // Return JSON with payment URL for client-side redirect
+    const insertQuery = `
+      INSERT INTO event_registrations (
+        honorific, first_name, middle_name, last_name, email, phone, 
+        address, city, state, pincode, med_council_number, category, type, 
+        package_ids, payment_id, payment_status, amount, currency
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    await query(insertQuery, [
+      honorific || null,
+      first_name,
+      middle_name || null,
+      last_name,
+      email,
+      phone,
+      address || null,
+      city || null,
+      state || null,
+      pincode || null,
+      med_council_number || null,
+      category,
+      type || null,
+      JSON.stringify(package_ids), 
+      response.data.payment_request.id, 
+      "PENDING",
+      amount,
+      "INR",
+    ]);
+
     res.json({
       payment_request: {
         id: response.data.payment_request.id,
@@ -375,6 +416,10 @@ app.post("/create-order-instamojo", async (req, res) => {
 });
 
 
+
+app.post("/webhook",async (req,res)=>{
+
+})
 
 
 // Verify Payment & Store Registration
