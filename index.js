@@ -26,7 +26,7 @@ const webPush = require('web-push');
 const Razorpay = require('razorpay');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
-const genAI = new GoogleGenerativeAI('AIzaSyCvmpjZRi7GGS9TcPQeVCnSDJLFPchYZ38');
+const genAI = new GoogleGenerativeAI('token');
 const safetySettings = [
   {
     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
