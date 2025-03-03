@@ -417,9 +417,56 @@ app.post("/create-order-instamojo", async (req, res) => {
 
 
 
-app.post("/webhook",async (req,res)=>{
+app.post("/webhook", async (req, res) => {
+  try {
+    // Parse webhook data from Instamojo
+    const {
+      amount,
+      buyer,
+      buyer_name,
+      buyer_phone,
+      currency,
+      fees,
+      longurl,
+      mac,
+      payment_id,
+      payment_request_id,
+      purpose,
+      shorturl,
+      status,
+    } = req.body;
 
-})
+    console.log("Webhook received:", req.body);
+
+    // Map Instamojo status to our payment_status ENUM
+    const paymentStatus = status === "Credit" ? "SUCCESS" : "FAIL";
+
+    // Update event_registrations table
+    const updateQuery = `
+      UPDATE event_registrations
+      SET payment_status = ?,
+          payment_date = NOW(),
+          amount = ?,
+          currency = ?,
+          fees = ?
+      WHERE payment_id = ?
+    `;
+    const updateParams = [paymentStatus, amount, currency, fees, payment_id];
+
+    const result = await query(updateQuery, updateParams);
+
+    if (result.affectedRows === 0) {
+      console.warn(`No registration found for payment_id: ${payment_id}`);
+      // Optionally insert a new record if no match is found (see below)
+    }
+
+    // Respond to Instamojo to acknowledge receipt
+    res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Error processing webhook:", error);
+    res.status(500).send("Error processing webhook");
+  }
+});
 
 
 // Verify Payment & Store Registration
