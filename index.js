@@ -452,29 +452,31 @@ app.post("/verify-payment", async (req, res) => {
   }
 });
 
-// API to fetch registrations with search & filter
 app.get("/api/registrations", (req, res) => {
   let { search, payment_status } = req.query;
   let sql = "SELECT * FROM event_registrations WHERE 1=1";
+  let values = [];
 
   if (search) {
-    sql += ` AND (name LIKE '%${search}%' OR email LIKE '%${search}%' OR phone LIKE '%${search}%' OR payment_id LIKE '%${search}%')`;
+    sql += ` AND (first_name LIKE ? OR middle_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ? OR payment_id LIKE ?)`;
+    values.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
 
   if (payment_status) {
-    sql += ` AND payment_status = '${payment_status}'`;
+    sql += ` AND payment_status = ?`;
+    values.push(payment_status);
   }
 
-  connection.query(sql, (err, results) => {
+  connection.query(sql, values, (err, results) => {
     if (err) {
-      return res.status(500).json({ error: "Database query error" });
+      return res.status(500).json({ error: "Database query error", details: err.message });
     }
     res.json(results);
   });
 });
 
 app.put("/api/registrations/edit/:id", (req, res) => {
-  const {
+  let {
     honorific,
     first_name,
     middle_name,
@@ -491,75 +493,42 @@ app.put("/api/registrations/edit/:id", (req, res) => {
     package_ids,
     payment_id,
     payment_status,
-    payment_date,
     amount,
     currency,
-    fees,
+    payment_date,
   } = req.body;
 
-  // Convert ISO date to MySQL-compatible format (if provided)
-  const formattedPaymentDate = payment_date
-    ? new Date(payment_date).toISOString().slice(0, 19).replace("T", " ")
-    : null;
+  // Ensure package_ids is stored as JSON if not null
+  if (typeof package_ids === "string") {
+    try {
+      package_ids = JSON.parse(package_ids);
+    } catch (error) {
+      return res.status(400).json({ error: "Invalid JSON format for package_ids" });
+    }
+  }
 
-  // SQL query to update all fields in event_registrations
-  const updateQuery = `
+  // Convert date format
+  if (payment_date) {
+    payment_date = new Date(payment_date).toISOString().slice(0, 19).replace("T", " ");
+  }
+
+  const query = `
     UPDATE event_registrations 
-    SET 
-      honorific = ?,
-      first_name = ?,
-      middle_name = ?,
-      last_name = ?,
-      email = ?,
-      phone = ?,
-      address = ?,
-      city = ?,
-      state = ?,
-      pincode = ?,
-      med_council_number = ?,
-      category = ?,
-      type = ?,
-      package_ids = ?,
-      payment_id = ?,
-      payment_status = ?,
-      payment_date = ?,
-      amount = ?,
-      currency = ?,
-      fees = ?
-    WHERE id = ?
+    SET honorific=?, first_name=?, middle_name=?, last_name=?, email=?, phone=?, address=?, 
+        city=?, state=?, pincode=?, med_council_number=?, category=?, type=?, package_ids=?, 
+        payment_id=?, payment_status=?, amount=?, currency=?, payment_date=COALESCE(?, payment_date)
+    WHERE id=?
   `;
 
-  const params = [
-    honorific || null,
-    first_name,
-    middle_name || null,
-    last_name,
-    email,
-    phone,
-    address || null,
-    city || null,
-    state || null,
-    pincode || null,
-    med_council_number || null,
-    category,
-    type || null,
-    package_ids ? JSON.stringify(package_ids) : null, // Convert array to JSON string
-    payment_id,
-    payment_status,
-    formattedPaymentDate,
-    amount || null,
-    currency || null,
-    fees || null,
-    req.params.id,
+  const values = [
+    honorific, first_name, middle_name, last_name, email, phone, address,
+    city, state, pincode, med_council_number, category, type, JSON.stringify(package_ids),
+    payment_id, payment_status, amount, currency, payment_date, req.params.id
   ];
 
-  connection.query(updateQuery, params, (err, result) => {
-    if (err) {
-      return res.status(500).json({ error: "Update failed", details: err.message });
-    }
-    if (result.affectedRows === 0) {
-      return res.status(404).json({ error: "Registration not found" });
-    }
+  connection.query(query, values, (err, result) => {
+    if (err) return res.status(500).json({ error: "Update failed", details: err.message });
+    if (result.affectedRows === 0) return res.status(404).json({ error: "No record found with this ID" });
     res.json({ message: "User updated successfully" });
   });
 });
