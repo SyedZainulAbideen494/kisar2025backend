@@ -451,7 +451,7 @@ app.post("/webhook", async (req, res) => {
           fees = ?
       WHERE payment_id = ?
     `;
-    const updateParams = [paymentStatus, amount, currency, fees, payment_id];
+    const updateParams = [paymentStatus, amount, currency, fees, payment_request_id];
 
     const result = await query(updateQuery, updateParams);
 
