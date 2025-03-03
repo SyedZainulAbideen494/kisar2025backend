@@ -446,12 +446,13 @@ app.post("/webhook", async (req, res) => {
       UPDATE event_registrations
       SET payment_status = ?,
           payment_date = NOW(),
+          payment_id = ?,
           amount = ?,
           currency = ?,
           fees = ?
       WHERE payment_id = ?
     `;
-    const updateParams = [paymentStatus, amount, currency, fees, payment_request_id];
+    const updateParams = [paymentStatus, payment_id, amount, currency, fees, payment_request_id];
 
     const result = await query(updateQuery, updateParams);
 
