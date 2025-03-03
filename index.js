@@ -27,6 +27,7 @@ const Razorpay = require('razorpay');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { HarmBlockThreshold, HarmCategory } = require("@google/generative-ai");
 const genAI = new GoogleGenerativeAI('token');
+const axios = require("axios");
 const safetySettings = [
   {
     category: HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -457,8 +458,51 @@ app.post("/webhook", async (req, res) => {
     const result = await query(updateQuery, updateParams);
 
     if (result.affectedRows === 0) {
-      console.warn(`No registration found for payment_id: ${payment_id}`);
-      // Optionally insert a new record if no match is found (see below)
+      console.warn(`No registration found for payment_request_id: ${payment_request_id}`);
+    }
+
+    if (status === "Credit") {
+      const packageQuery = `
+        SELECT p.name, p.price
+        FROM event_registrations er
+        JOIN packages p ON JSON_CONTAINS(er.package_ids, JSON_QUOTE(CAST(p.id AS CHAR)), '$')
+        WHERE er.payment_id = ?
+      `;
+      const packageParams = [payment_request_id];
+      const packageResult = await query(packageQuery, packageParams);
+
+      if (!packageResult.length) {
+        throw new Error(`No packages found for payment_request_id: ${payment_request_id}`);
+      }
+
+      // Calculate base amounts excluding 18% GST
+      const gstRate = 0.18; // 9% CGST + 9% SGST
+      const items = packageResult.map(pkg => {
+        const priceWithGst = parseFloat(pkg.price);
+        const basePrice = priceWithGst / (1 + gstRate); // Remove GST
+        return {
+          description: pkg.name,
+          sacCode: "9995", // Fixed SAC code
+          amount: basePrice.toFixed(2) // Base amount excluding GST
+        };
+      });
+
+      // Payload for Python API
+      const invoicePayload = {
+        date: new Date().toLocaleDateString("en-GB"), // Current date in DD/MM/YYYY
+        invoiceNo: "0", // Fixed invoice number
+        billTo: buyer_name || "Customer",
+        instamojoPaymentId: payment_id,
+        email: buyer,
+        items: items
+      };
+
+      // Call Python FastAPI endpoint
+      await axios.post("http://localhost:4000/api/generate-invoice", invoicePayload, {
+        headers: { "Content-Type": "application/json" }
+      });
+
+      console.log(`Invoice generated and email sent for payment_id: ${payment_id}`);
     }
 
     // Respond to Instamojo to acknowledge receipt
