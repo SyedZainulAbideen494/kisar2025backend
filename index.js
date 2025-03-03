@@ -444,7 +444,7 @@ app.post("/webhook", async (req, res) => {
       const packageQuery = `
         SELECT p.name, p.price
         FROM event_registrations er
-        JOIN packages p ON JSON_CONTAINS(er.package_ids, JSON_QUOTE(CAST(p.id AS CHAR)), '$')
+        JOIN packages p ON JSON_CONTAINS(er.package_ids, CAST(p.id AS JSON))
         WHERE er.payment_id = ?
       `;
       const packageParams = [payment_request_id];
