@@ -354,7 +354,7 @@ app.post("/create-order-instamojo", async (req, res) => {
 
     const paymentData = {
       purpose: `Packages: ${packageTitles.join(", ")}`, 
-      amount: 10,
+      amount: amount,
       buyer_name: buyerName,
       email: email,
       phone: phone,
