@@ -335,12 +335,26 @@ app.post("/create-order-instamojo", async (req, res) => {
       med_council_number,
       category,
       type,
-      package_ids, 
+      package_ids,
     } = req.body;
 
     const INSTAMOJO_API_KEY = "0cb75fd5924ef24ef42dd7a202a4d773";
     const INSTAMOJO_AUTH_TOKEN = "432d3e19bdcf4f6fc0d2f4e71674f868";
     const INSTAMOJO_API_URL = "https://www.instamojo.com/api/1.1/payment-requests/";
+
+    // Check if phone number already has a SUCCESS entry
+    const checkQuery = `
+      SELECT COUNT(*) as successCount
+      FROM event_registrations
+      WHERE phone = ? AND payment_status = 'SUCCESS'
+    `;
+    const checkResult = await query(checkQuery, [phone]);
+
+    if (checkResult[0].successCount > 0) {
+      return res.status(409).json({
+        error: "This phone number is already registered with a successful payment."
+      });
+    }
 
     const buyerName = `${honorific || ""} ${first_name} ${middle_name || ""} ${last_name}`.trim();
 
@@ -353,7 +367,7 @@ app.post("/create-order-instamojo", async (req, res) => {
     const packageTitles = packageResult.map((row) => row.name);
 
     const paymentData = {
-      purpose: `Packages: ${packageTitles.join(", ")}`, 
+      purpose: `Packages: ${packageTitles.join(", ")}`,
       amount: amount,
       buyer_name: buyerName,
       email: email,
@@ -394,8 +408,8 @@ app.post("/create-order-instamojo", async (req, res) => {
       med_council_number || null,
       category,
       type || null,
-      JSON.stringify(package_ids), 
-      response.data.payment_request.id, 
+      JSON.stringify(package_ids),
+      response.data.payment_request.id,
       "PENDING",
       amount,
       "INR",
