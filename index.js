@@ -356,12 +356,12 @@ app.post("/create-order-instamojo", async (req, res) => {
 
     const paymentData = {
       purpose: `Packages: ${packageTitles.join(", ")}`, 
-      amount: amount,
+      amount: 10,
       buyer_name: buyerName,
       email: email,
       phone: phone,
-      redirect_url: "http://localhost:3000/payment-success",
-      webhook: "http://193.203.163.172/webhook",
+      redirect_url: "https://kisar2025.vercel.app/payment-success",
+      webhook: "https://srv742265.hstgr.cloud/webhook",
       send_email: true,
       send_sms: true,
       allow_repeated_payments: false,
