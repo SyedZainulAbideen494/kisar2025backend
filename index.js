@@ -474,19 +474,94 @@ app.get("/api/registrations", (req, res) => {
 });
 
 app.put("/api/registrations/edit/:id", (req, res) => {
-  let { name, email, phone, payment_id, payment_status, payment_date } = req.body;
+  const {
+    honorific,
+    first_name,
+    middle_name,
+    last_name,
+    email,
+    phone,
+    address,
+    city,
+    state,
+    pincode,
+    med_council_number,
+    category,
+    type,
+    package_ids,
+    payment_id,
+    payment_status,
+    payment_date,
+    amount,
+    currency,
+    fees,
+  } = req.body;
 
-  // Convert ISO date to MySQL-compatible format
-  payment_date = new Date(payment_date).toISOString().slice(0, 19).replace("T", " ");
+  // Convert ISO date to MySQL-compatible format (if provided)
+  const formattedPaymentDate = payment_date
+    ? new Date(payment_date).toISOString().slice(0, 19).replace("T", " ")
+    : null;
 
-  connection.query(
-    "UPDATE event_registrations SET name=?, email=?, phone=?, payment_id=?, payment_status=?, payment_date=? WHERE id=?",
-    [name, email, phone, payment_id, payment_status, payment_date, req.params.id],
-    (err) => {
-      if (err) return res.status(500).json({ error: "Update failed", details: err.message });
-      res.json({ message: "User updated successfully" });
+  // SQL query to update all fields in event_registrations
+  const updateQuery = `
+    UPDATE event_registrations 
+    SET 
+      honorific = ?,
+      first_name = ?,
+      middle_name = ?,
+      last_name = ?,
+      email = ?,
+      phone = ?,
+      address = ?,
+      city = ?,
+      state = ?,
+      pincode = ?,
+      med_council_number = ?,
+      category = ?,
+      type = ?,
+      package_ids = ?,
+      payment_id = ?,
+      payment_status = ?,
+      payment_date = ?,
+      amount = ?,
+      currency = ?,
+      fees = ?
+    WHERE id = ?
+  `;
+
+  const params = [
+    honorific || null,
+    first_name,
+    middle_name || null,
+    last_name,
+    email,
+    phone,
+    address || null,
+    city || null,
+    state || null,
+    pincode || null,
+    med_council_number || null,
+    category,
+    type || null,
+    package_ids ? JSON.stringify(package_ids) : null, // Convert array to JSON string
+    payment_id,
+    payment_status,
+    formattedPaymentDate,
+    amount || null,
+    currency || null,
+    fees || null,
+    req.params.id,
+  ];
+
+  connection.query(updateQuery, params, (err, result) => {
+    if (err) {
+      return res.status(500).json({ error: "Update failed", details: err.message });
     }
-  );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "Registration not found" });
+    }
+    res.json({ message: "User updated successfully" });
+  });
 });
 
 
