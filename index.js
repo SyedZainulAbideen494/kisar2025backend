@@ -474,20 +474,53 @@ app.get("/api/registrations", (req, res) => {
 });
 
 app.put("/api/registrations/edit/:id", (req, res) => {
-  let { name, email, phone, payment_id, payment_status, payment_date } = req.body;
+  let {
+    honorific,
+    first_name,
+    middle_name,
+    last_name,
+    email,
+    phone,
+    address,
+    city,
+    state,
+    pincode,
+    med_council_number,
+    category,
+    type,
+    package_ids,
+    payment_id,
+    payment_status,
+    amount,
+    currency,
+    payment_date,
+  } = req.body;
 
-  // Convert ISO date to MySQL-compatible format
-  payment_date = new Date(payment_date).toISOString().slice(0, 19).replace("T", " ");
+  // Convert date format
+  if (payment_date) {
+    payment_date = new Date(payment_date).toISOString().slice(0, 19).replace("T", " ");
+  }
 
-  connection.query(
-    "UPDATE event_registrations SET name=?, email=?, phone=?, payment_id=?, payment_status=?, payment_date=? WHERE id=?",
-    [name, email, phone, payment_id, payment_status, payment_date, req.params.id],
-    (err) => {
-      if (err) return res.status(500).json({ error: "Update failed", details: err.message });
-      res.json({ message: "User updated successfully" });
-    }
-  );
+  const query = `
+    UPDATE event_registrations 
+    SET honorific=?, first_name=?, middle_name=?, last_name=?, email=?, phone=?, address=?, 
+        city=?, state=?, pincode=?, med_council_number=?, category=?, type=?, package_ids=?, 
+        payment_id=?, payment_status=?, amount=?, currency=?, payment_date=?
+    WHERE id=?
+  `;
+
+  const values = [
+    honorific, first_name, middle_name, last_name, email, phone, address,
+    city, state, pincode, med_council_number, category, type, package_ids,
+    payment_id, payment_status, amount, currency, payment_date, req.params.id
+  ];
+
+  connection.query(query, values, (err) => {
+    if (err) return res.status(500).json({ error: "Update failed", details: err.message });
+    res.json({ message: "User updated successfully" });
+  });
 });
+
 
 
 // Delete Registration
