@@ -440,26 +440,6 @@ app.post("/webhook", async (req, res) => {
 
     // Map Instamojo status to our payment_status ENUM
     const paymentStatus = status === "Credit" ? "SUCCESS" : "FAIL";
-
-    // Update event_registrations table
-    const updateQuery = `
-      UPDATE event_registrations
-      SET payment_status = ?,
-          payment_date = NOW(),
-          payment_id = ?,
-          amount = ?,
-          currency = ?,
-          fees = ?
-      WHERE payment_id = ?
-    `;
-    const updateParams = [paymentStatus, payment_id, amount, currency, fees, payment_request_id];
-
-    const result = await query(updateQuery, updateParams);
-
-    if (result.affectedRows === 0) {
-      console.warn(`No registration found for payment_request_id: ${payment_request_id}`);
-    }
-
     if (status === "Credit") {
       const packageQuery = `
         SELECT p.name, p.price
@@ -503,6 +483,27 @@ app.post("/webhook", async (req, res) => {
 
       console.log(`Invoice generated and email sent for payment_id: ${payment_id}`);
     }
+
+    // Update event_registrations table
+    const updateQuery = `
+      UPDATE event_registrations
+      SET payment_status = ?,
+          payment_date = NOW(),
+          payment_id = ?,
+          amount = ?,
+          currency = ?,
+          fees = ?
+      WHERE payment_id = ?
+    `;
+    const updateParams = [paymentStatus, payment_id, amount, currency, fees, payment_request_id];
+
+    const result = await query(updateQuery, updateParams);
+
+    if (result.affectedRows === 0) {
+      console.warn(`No registration found for payment_request_id: ${payment_request_id}`);
+    }
+
+    
 
     // Respond to Instamojo to acknowledge receipt
     res.status(200).send("Webhook received");
