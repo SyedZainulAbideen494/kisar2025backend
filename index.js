@@ -651,7 +651,7 @@ app.delete("/api/registrations/remove/:id", (req, res) => {
 app.get("/api/packages", async (req, res) => {
   try {
     const packages = await query("SELECT * FROM packages");
-    console.log(packages);
+   
     res.json(packages);
   } catch (error) {
     console.error(error)
