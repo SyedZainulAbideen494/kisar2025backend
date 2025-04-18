@@ -558,26 +558,51 @@ app.post("/verify-payment", async (req, res) => {
 
 app.get("/api/registrations", (req, res) => {
   let { search, payment_status } = req.query;
-  let sql = "SELECT * FROM event_registrations WHERE 1=1";
+  let sql = `
+    SELECT 
+      er.*, 
+      GROUP_CONCAT(p.name) AS package_names
+    FROM 
+      event_registrations er
+    LEFT JOIN 
+      packages p ON FIND_IN_SET(p.id, REPLACE(REPLACE(REPLACE(er.package_ids, '[', ''), ']', ''), ' ', ''))
+    WHERE 1=1
+  `;
   let values = [];
 
   if (search) {
-    sql += ` AND (first_name LIKE ? OR middle_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ? OR payment_id LIKE ?)`;
+    sql += ` AND (er.first_name LIKE ? OR er.middle_name LIKE ? OR er.last_name LIKE ? OR er.email LIKE ? OR er.phone LIKE ? OR er.payment_id LIKE ?)`;
     values.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
 
   if (payment_status) {
-    sql += ` AND payment_status = ?`;
+    sql += ` AND er.payment_status = ?`;
     values.push(payment_status);
   }
+
+  sql += ` GROUP BY er.id`;
 
   connection.query(sql, values, (err, results) => {
     if (err) {
       return res.status(500).json({ error: "Database query error", details: err.message });
     }
+
+    console.log(results);  // Log the results to see what's returned
+
+    // Ensure package_names are populated
+    results.forEach(result => {
+      if (result.package_names === null) {
+        result.package_names = [];
+      } else {
+        result.package_names = result.package_names.split(',');
+      }
+    });
+
     res.json(results);
   });
 });
+
+
 
 app.put("/api/registrations/edit/:id", (req, res) => {
   let {
