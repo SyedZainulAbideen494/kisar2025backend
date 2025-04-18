@@ -587,7 +587,6 @@ app.get("/api/registrations", (req, res) => {
       return res.status(500).json({ error: "Database query error", details: err.message });
     }
 
-    console.log(results);  // Log the results to see what's returned
 
     // Ensure package_names are populated
     results.forEach(result => {
