@@ -1,5 +1,3 @@
-// Python FastAPI Mail Service
-const fastApiCode = `
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from docx import Document
@@ -409,4 +407,3 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=4000)
-`;
