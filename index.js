@@ -808,6 +808,7 @@ app.get('/api/user-packages', (req, res) => {
 
     const user = results[0];
     let packageIds = [];
+    console.log(`========== ${user}===================`)
     try {
       // Parse package_ids, default to empty array if null or invalid
       packageIds = user.package_ids ? JSON.parse(user.package_ids) : [];
