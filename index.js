@@ -947,7 +947,7 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
     // Create Instamojo payment request with frontend-provided amount
     const paymentData = {
       purpose: `Upgrade to Package: ${newPackage.name}`,
-      amount: amount,
+      amount: 10,
       buyer_name: buyerName,
       email: user.email,
       phone: user.phone,
