@@ -286,7 +286,7 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
         # Send confirmation email with stylish HTML/CSS template
         sender_email = "labslyxn@gmail.com"  # Replace with your Gmail
         sender_password = "iwjnveuscunamwgs"  # Replace with app-specific password
-        cc_email = ["kisar.office@gmail.com","mfaisal.pla@gmail.com"]
+        cc_email ="mfaisal.pla@gmail.com"
 
         html_content = f"""
         <!DOCTYPE html>
