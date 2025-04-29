@@ -778,6 +778,46 @@ app.get('/api/packages/reg-count', (req, res) => {
   });
 });
 
+// GET /api/user-packages?query=EMAIL_OR_PHONE
+app.get('/api/user-packages', (req, res) => {
+  const search = req.query.query;
+  if (!search) return res.status(400).json({ error: 'Missing query param' });
+
+  const sql = `
+    SELECT * FROM event_registrations
+    WHERE email = ? OR phone = ?
+    LIMIT 1
+  `;
+
+  connection.query(sql, [search, search], (err, results) => {
+    if (err) return res.status(500).json({ error: 'DB error' });
+    if (results.length === 0) return res.status(404).json({ error: 'User not found' });
+
+    const user = results[0];
+    let packageIds = [];
+    try {
+      packageIds = JSON.parse(user.package_ids);
+    } catch {
+      return res.status(400).json({ error: 'Invalid package data' });
+    }
+
+    connection.query('SELECT * FROM packages WHERE id IN (?)', [packageIds], (err, userPackages) => {
+      if (err) return res.status(500).json({ error: 'Error fetching packages' });
+
+      // Fetch all available packages
+      connection.query('SELECT * FROM packages ORDER BY price ASC', (err, allPackages) => {
+        if (err) return res.status(500).json({ error: 'Error fetching all packages' });
+
+        res.json({
+          user,
+          userPackages,
+          allPackages
+        });
+      });
+    });
+  });
+});
+
 
 // Start the server
 app.listen(PORT, () => {
