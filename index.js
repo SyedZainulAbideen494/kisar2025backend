@@ -1036,6 +1036,8 @@ app.post("/api/upgrade-webhook", async (req, res) => {
       const newPackageId = packageResult[0].id;
       const packagePrice = packageResult[0].price;
 
+      console.log("New Package", packageResult);
+
       // Fetch current package_ids and preserve non-MAIN packages
       let currentPackageIds = registrationResult[0].package_ids;
       // try {
