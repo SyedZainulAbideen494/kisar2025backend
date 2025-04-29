@@ -738,6 +738,48 @@ app.delete("/api/packages/remove/:id", async (req, res) => {
   }
 });
 
+// API endpoint to fetch package data with registration counts
+app.get('/api/packages/reg-count', (req, res) => {
+  // Selecting id and name from packages table
+  const sql = 'SELECT id, name FROM packages';
+  connection.query(sql, (err, packages) => {
+    if (err) {
+      throw err;
+    }
+
+    const promises = packages.map((pkg) => {
+      return new Promise((resolve, reject) => {
+        // Count only where package_ids contains pkg.id AND payment_status = 'SUCCESS'
+        connection.query(
+          `SELECT COUNT(*) AS reg_count 
+           FROM event_registrations 
+           WHERE JSON_CONTAINS(package_ids, ?) 
+           AND payment_status = 'SUCCESS'`,
+          [`[${pkg.id}]`],
+          (err, result) => {
+            if (err) {
+              reject(err);
+            } else {
+              pkg.reg_count = result[0].reg_count;
+              resolve(pkg);
+            }
+          }
+        );
+      });
+    });
+
+    Promise.all(promises)
+      .then((packagesWithCount) => {
+        console.log(packagesWithCount);
+        res.json(packagesWithCount); // Send JSON response with packages and registration counts
+      })
+      .catch((err) => {
+        res.status(500).json({ error: 'Error fetching data' });
+      });
+  });
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
