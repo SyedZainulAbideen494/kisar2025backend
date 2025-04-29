@@ -1037,7 +1037,7 @@ app.post("/api/upgrade-webhook", async (req, res) => {
       const packagePrice = packageResult[0].price;
 
       // Fetch current package_ids and preserve non-MAIN packages
-      let currentPackageIds = registrationResult[0].package_ids
+      let currentPackageIds = registrationResult[0].package_ids;
       // try {
       //   currentPackageIds = JSON.parse(registrationResult[0].package_ids || '[]');
       //   if (!Array.isArray(currentPackageIds)) {
@@ -1084,6 +1084,23 @@ app.post("/api/upgrade-webhook", async (req, res) => {
         fees,
         payment_request_id,
       ]);
+
+      // Send upgrade confirmation email
+      try {
+        const invoicePayload = {
+          billTo: buyer_name || "Customer",
+          email: buyer,
+          instamojoPaymentId: payment_id,
+          packageName: packageName,
+          amount: parseFloat(amount).toFixed(2),
+        };
+        await axios.post("http://localhost:4000/api/generate-upgrade-invoice", invoicePayload, {
+          headers: { "Content-Type": "application/json" }
+        });
+        console.log(`Upgrade confirmation email sent for payment_id: ${payment_id}`);
+      } catch (emailError) {
+        console.error(`Error sending upgrade confirmation email for payment_id: ${payment_id}:`, emailError.message);
+      }
     } else {
       // Update only payment status for failed payments
       const updateQuery = `
