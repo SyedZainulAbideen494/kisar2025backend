@@ -1059,9 +1059,11 @@ app.post("/api/upgrade-webhook", async (req, res) => {
       const nonMainPackageIds = packageTypesResult
         .filter(pkg => pkg.type !== 'MAIN')
         .map(pkg => pkg.id);
+      console.log(`Non-MAIN package IDs: ${nonMainPackageIds}`);
 
       // Combine non-MAIN package IDs with the new MAIN package ID
       const updatedPackageIds = [...nonMainPackageIds, newPackageId];
+      console.log(`Updated package IDs: ${updatedPackageIds}`);
 
       // Update package_ids (preserve non-MAIN, add new MAIN package_id)
       const updateQuery = `
