@@ -780,41 +780,68 @@ app.get('/api/packages/reg-count', (req, res) => {
 
 // GET /api/user-packages?query=EMAIL_OR_PHONE
 app.get('/api/user-packages', (req, res) => {
-  const search = req.query.query;
-  if (!search) return res.status(400).json({ error: 'Missing query param' });
+  const search = req.query.query?.trim();
+  if (!search) {
+    return res.status(400).json({ error: 'Missing query parameter' });
+  }
 
+  // Optimized SQL query with case-insensitive search for email, name, or phone
   const sql = `
-  SELECT * FROM event_registrations
-  WHERE (email = ? OR phone = ?) AND payment_status = 'SUCCESS'
-  LIMIT 1
-`;
+    SELECT * FROM event_registrations
+    WHERE (
+      LOWER(email) = LOWER(?) OR
+      LOWER(first_name) = LOWER(?) OR
+      LOWER(phone) = LOWER(?)
+    ) AND payment_status = 'SUCCESS'
+    LIMIT 1
+  `;
 
-  connection.query(sql, [search, search], (err, results) => {
-    if (err) return res.status(500).json({ error: 'DB error' });
-    if (results.length === 0) return res.status(404).json({ error: 'User not found' });
+  connection.query(sql, [search, search, search], (err, results) => {
+    if (err) {
+      console.error('Database error:', err);
+      return res.status(500).json({ error: 'Database error' });
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     const user = results[0];
     let packageIds = [];
     try {
-      packageIds = JSON.parse(user.package_ids);
+      packageIds = JSON.parse(user.package_ids) || [];
     } catch {
       return res.status(400).json({ error: 'Invalid package data' });
     }
 
-    connection.query('SELECT * FROM packages WHERE id IN (?)', [packageIds], (err, userPackages) => {
-      if (err) return res.status(500).json({ error: 'Error fetching packages' });
+    // Fetch user's packages
+    connection.query(
+      'SELECT id, name, price FROM packages WHERE id IN (?)',
+      [packageIds.length ? packageIds : [0]], // Handle empty packageIds
+      (err, userPackages) => {
+        if (err) {
+          console.error('Error fetching packages:', err);
+          return res.status(500).json({ error: 'Error fetching packages' });
+        }
 
-      // Fetch all available packages
-      connection.query('SELECT * FROM packages ORDER BY price ASC', (err, allPackages) => {
-        if (err) return res.status(500).json({ error: 'Error fetching all packages' });
+        // Fetch all available packages
+        connection.query('SELECT id, name, price FROM packages ORDER BY price ASC', (err, allPackages) => {
+          if (err) {
+            console.error('Error fetching all packages:', err);
+            return res.status(500).json({ error: 'Error fetching all packages' });
+          }
 
-        res.json({
-          user,
-          userPackages,
-          allPackages
+          res.json({
+            user: {
+              first_name: user.first_name,
+              email: user.email,
+              phone: user.phone,
+            },
+            userPackages,
+            allPackages,
+          });
         });
-      });
-    });
+      }
+    );
   });
 });
 
