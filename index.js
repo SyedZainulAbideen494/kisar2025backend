@@ -822,50 +822,31 @@ app.get('/api/user-packages', (req, res) => {
       packageIds = [];
     }
 
-    // Fetch user's packages (MAIN type only)
-    const fetchPackages = (ids, callback) => {
-      if (!ids.length) {
-        return callback(null, []);
-      }
-      connection.query(
-        'SELECT id, name, price FROM packages WHERE id IN (?) AND type = ? AND active = 1',
-        [ids, 'MAIN'],
-        callback
-      );
-    };
-
-    fetchPackages(packageIds, (err, userPackages) => {
-      if (err) {
-        console.error('Error fetching user packages:', err);
-        return res.status(500).json({ error: 'Error fetching user packages' });
-      }
-
-      // Fetch all available MAIN packages
-      connection.query(
-        'SELECT id, name, price FROM packages WHERE type = ? AND active = 1 ORDER BY price ASC',
-        ['MAIN'],
-        (err, allPackages) => {
-          if (err) {
-            console.error('Error fetching all packages:', err);
-            return res.status(500).json({ error: 'Error fetching all packages' });
-          }
-
-          res.json({
-            user: {
-              id: user.id,
-              honorific: user.honorific,
-              first_name: user.first_name,
-              middle_name: user.middle_name,
-              last_name: user.last_name,
-              email: user.email,
-              phone: user.phone,
-            },
-            userPackages: userPackages || [],
-            allPackages: allPackages || [],
-          });
+    // Fetch all available MAIN packages
+    connection.query(
+      'SELECT id, name, price FROM packages WHERE type = ? AND active = 1 ORDER BY price ASC',
+      ['MAIN'],
+      (err, allPackages) => {
+        if (err) {
+          console.error('Error fetching all packages:', err);
+          return res.status(500).json({ error: 'Error fetching all packages' });
         }
-      );
-    });
+
+        res.json({
+          user: {
+            id: user.id,
+            honorific: user.honorific,
+            first_name: user.first_name,
+            middle_name: user.middle_name,
+            last_name: user.last_name,
+            email: user.email,
+            phone: user.phone,
+            package_ids: packageIds,
+          },
+          allPackages: allPackages || [],
+        });
+      }
+    );
   });
 });
 
