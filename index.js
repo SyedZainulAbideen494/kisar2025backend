@@ -799,7 +799,7 @@ app.get('/api/user-packages', (req, res) => {
 
   connection.query(sql, [search, search, search], (err, results) => {
     if (err) {
-      console.error('Database error:', err);
+      console.error('Database error in user query:', err);
       return res.status(500).json({ error: 'Database error' });
     }
     if (results.length === 0) {
@@ -812,52 +812,59 @@ app.get('/api/user-packages', (req, res) => {
       // Parse package_ids, default to empty array if null or invalid
       packageIds = user.package_ids ? JSON.parse(user.package_ids) : [];
       if (!Array.isArray(packageIds)) {
+        console.warn(`Invalid package_ids format for user ${user.id}:`, user.package_ids);
         packageIds = [];
       }
+      // Filter out non-numeric IDs
+      packageIds = packageIds.filter(id => Number.isInteger(id) && id > 0);
     } catch (parseErr) {
-      console.error('Error parsing package_ids:', parseErr);
+      console.error(`Error parsing package_ids for user ${user.id}:`, parseErr);
       packageIds = [];
     }
 
-    // Fetch user's packages only if packageIds is non-empty
+    // Fetch user's packages (MAIN type only)
     const fetchPackages = (ids, callback) => {
       if (!ids.length) {
         return callback(null, []);
       }
       connection.query(
-        'SELECT id, name, price FROM packages WHERE id IN (?)',
-        [ids],
+        'SELECT id, name, price FROM packages WHERE id IN (?) AND type = ? AND active = 1',
+        [ids, 'MAIN'],
         callback
       );
     };
 
     fetchPackages(packageIds, (err, userPackages) => {
       if (err) {
-        console.error('Error fetching packages:', err);
-        return res.status(500).json({ error: 'Error fetching packages' });
+        console.error('Error fetching user packages:', err);
+        return res.status(500).json({ error: 'Error fetching user packages' });
       }
 
-      // Fetch all available packages
-      connection.query('SELECT id, name, price FROM packages ORDER BY price ASC', (err, allPackages) => {
-        if (err) {
-          console.error('Error fetching all packages:', err);
-          return res.status(500).json({ error: 'Error fetching all packages' });
-        }
+      // Fetch all available MAIN packages
+      connection.query(
+        'SELECT id, name, price FROM packages WHERE type = ? AND active = 1 ORDER BY price ASC',
+        ['MAIN'],
+        (err, allPackages) => {
+          if (err) {
+            console.error('Error fetching all packages:', err);
+            return res.status(500).json({ error: 'Error fetching all packages' });
+          }
 
-        res.json({
-          user: {
-            id: user.id,
-            honorific: user.honorific,
-            first_name: user.first_name,
-            middle_name: user.middle_name,
-            last_name: user.last_name,
-            email: user.email,
-            phone: user.phone,
-          },
-          userPackages: userPackages || [],
-          allPackages: allPackages || [],
-        });
-      });
+          res.json({
+            user: {
+              id: user.id,
+              honorific: user.honorific,
+              first_name: user.first_name,
+              middle_name: user.middle_name,
+              last_name: user.last_name,
+              email: user.email,
+              phone: user.phone,
+            },
+            userPackages: userPackages || [],
+            allPackages: allPackages || [],
+          });
+        }
+      );
     });
   });
 });
