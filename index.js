@@ -770,7 +770,6 @@ app.get('/api/packages/reg-count', (req, res) => {
 
     Promise.all(promises)
       .then((packagesWithCount) => {
-        console.log(packagesWithCount);
         res.json(packagesWithCount); // Send JSON response with packages and registration counts
       })
       .catch((err) => {
