@@ -145,7 +145,7 @@ async def generate_invoice(request: InvoiceRequest):
         # Send confirmation email with stylish HTML/CSS template
         sender_email = "labslyxn@gmail.com"  # Replace with your Gmail
         sender_password = "iwjnveuscunamwgs"  # Replace with app-specific password
-        cc_email = ["kisar.office@gmail.com","mfaisal.pla@gmail.com"]
+        cc_email = "mfaisal.pla@gmail.com"
 
         # Generate items table for email
         items_html = "".join(
