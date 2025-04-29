@@ -785,9 +785,10 @@ app.get('/api/user-packages', (req, res) => {
     return res.status(400).json({ error: 'Missing query parameter' });
   }
 
-  // Optimized SQL query with case-insensitive search for email, name, or phone
+  // Case-insensitive search for email, name, or phone
   const sql = `
-    SELECT * FROM event_registrations
+    SELECT id, honorific, first_name, middle_name, last_name, email, phone, package_ids
+    FROM event_registrations
     WHERE (
       LOWER(email) = LOWER(?) OR
       LOWER(first_name) = LOWER(?) OR
@@ -808,40 +809,56 @@ app.get('/api/user-packages', (req, res) => {
     const user = results[0];
     let packageIds = [];
     try {
-      packageIds = JSON.parse(user.package_ids) || [];
-    } catch {
-      return res.status(400).json({ error: 'Invalid package data' });
+      // Parse package_ids, default to empty array if null or invalid
+      packageIds = user.package_ids ? JSON.parse(user.package_ids) : [];
+      if (!Array.isArray(packageIds)) {
+        packageIds = [];
+      }
+    } catch (parseErr) {
+      console.error('Error parsing package_ids:', parseErr);
+      packageIds = [];
     }
 
-    // Fetch user's packages
-    connection.query(
-      'SELECT id, name, price FROM packages WHERE id IN (?)',
-      [packageIds.length ? packageIds : [0]], // Handle empty packageIds
-      (err, userPackages) => {
+    // Fetch user's packages only if packageIds is non-empty
+    const fetchPackages = (ids, callback) => {
+      if (!ids.length) {
+        return callback(null, []);
+      }
+      connection.query(
+        'SELECT id, name, price FROM packages WHERE id IN (?)',
+        [ids],
+        callback
+      );
+    };
+
+    fetchPackages(packageIds, (err, userPackages) => {
+      if (err) {
+        console.error('Error fetching packages:', err);
+        return res.status(500).json({ error: 'Error fetching packages' });
+      }
+
+      // Fetch all available packages
+      connection.query('SELECT id, name, price FROM packages ORDER BY price ASC', (err, allPackages) => {
         if (err) {
-          console.error('Error fetching packages:', err);
-          return res.status(500).json({ error: 'Error fetching packages' });
+          console.error('Error fetching all packages:', err);
+          return res.status(500).json({ error: 'Error fetching all packages' });
         }
 
-        // Fetch all available packages
-        connection.query('SELECT id, name, price FROM packages ORDER BY price ASC', (err, allPackages) => {
-          if (err) {
-            console.error('Error fetching all packages:', err);
-            return res.status(500).json({ error: 'Error fetching all packages' });
-          }
-
-          res.json({
-            user: {
-              first_name: user.first_name,
-              email: user.email,
-              phone: user.phone,
-            },
-            userPackages,
-            allPackages,
-          });
+        res.json({
+          user: {
+            id: user.id,
+            honorific: user.honorific,
+            first_name: user.first_name,
+            middle_name: user.middle_name,
+            last_name: user.last_name,
+            email: user.email,
+            phone: user.phone,
+          },
+          userPackages: userPackages || [],
+          allPackages: allPackages || [],
         });
-      }
-    );
+      });
+    });
   });
 });
 
