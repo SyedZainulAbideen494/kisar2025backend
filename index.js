@@ -784,10 +784,10 @@ app.get('/api/user-packages', (req, res) => {
   if (!search) return res.status(400).json({ error: 'Missing query param' });
 
   const sql = `
-    SELECT * FROM event_registrations
-    WHERE email = ? OR phone = ?
-    LIMIT 1
-  `;
+  SELECT * FROM event_registrations
+  WHERE (email = ? OR phone = ?) AND payment_status = 'SUCCESS'
+  LIMIT 1
+`;
 
   connection.query(sql, [search, search], (err, results) => {
     if (err) return res.status(500).json({ error: 'DB error' });
