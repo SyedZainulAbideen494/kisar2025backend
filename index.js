@@ -864,7 +864,9 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
 
     // Fetch user details
     const userQuery = `
-      SELECT honorific, first_name, middle_name, last_name, email, phone, package_ids
+      SELECT honorific, first_name, middle_name, last_name, email, phone, package_ids,
+             address, city, state, pincode, med_council_number, category, type,
+             payment_id, payment_status, amount, currency, fees, payment_date
       FROM event_registrations
       WHERE id = ? AND payment_status = 'SUCCESS'
     `;
@@ -874,9 +876,9 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
     }
     const user = userResult[0];
 
-    // Fetch package details
+    // Fetch new package details (for name only, no price validation)
     const packageQuery = `
-      SELECT name, price
+      SELECT name
       FROM packages
       WHERE id = ? AND type = 'MAIN' AND active = 1
     `;
@@ -884,19 +886,46 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
     if (!packageResult.length) {
       return res.status(404).json({ error: "Package not found or not available" });
     }
-    const package = packageResult[0];
+    const newPackage = packageResult[0];
 
-    // Validate amount
-    if (parseFloat(amount) !== parseFloat(package.price)) {
-      return res.status(400).json({ error: "Amount does not match package price" });
-    }
+    // Insert current registration into event_registrations_activity
+    const activityQuery = `
+      INSERT INTO event_registrations_activity (
+        registration_id, honorific, first_name, middle_name, last_name, email, phone,
+        address, city, state, pincode, med_council_number, category, type, package_ids,
+        payment_id, payment_status, amount, currency, fees, payment_date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `;
+    await query(activityQuery, [
+      registration_id,
+      user.honorific,
+      user.first_name,
+      user.middle_name,
+      user.last_name,
+      user.email,
+      user.phone,
+      user.address,
+      user.city,
+      user.state,
+      user.pincode,
+      user.med_council_number,
+      user.category,
+      user.type,
+      user.package_ids,
+      user.payment_id,
+      user.payment_status,
+      user.amount,
+      user.currency,
+      user.fees,
+      user.payment_date,
+    ]);
 
     // Prepare buyer name
     const buyerName = `${user.honorific || ""} ${user.first_name} ${user.middle_name || ""} ${user.last_name}`.trim();
 
     // Create Instamojo payment request
     const paymentData = {
-      purpose: `Upgrade to Package: ${package.name}`,
+      purpose: `Upgrade to Package: ${newPackage.name}`,
       amount: amount,
       buyer_name: buyerName,
       email: user.email,
