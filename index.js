@@ -876,6 +876,21 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
     }
     const user = userResult[0];
 
+    // Sanitize package_ids to ensure valid JSON
+    let sanitizedPackageIds = '[]'; // Default to empty array
+    if (user.package_ids) {
+      try {
+        const parsed = JSON.parse(user.package_ids);
+        if (Array.isArray(parsed)) {
+          sanitizedPackageIds = JSON.stringify(parsed);
+        } else {
+          console.warn(`Invalid package_ids format for registration ${registration_id}: not an array`, user.package_ids);
+        }
+      } catch (error) {
+        console.warn(`Error parsing package_ids for registration ${registration_id}:`, error.message, user.package_ids);
+      }
+    }
+
     // Fetch new package details (for name only, no price validation)
     const packageQuery = `
       SELECT name
@@ -911,7 +926,7 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
       user.med_council_number,
       user.category,
       user.type,
-      user.package_ids,
+      sanitizedPackageIds,
       user.payment_id,
       user.payment_status,
       user.amount,
