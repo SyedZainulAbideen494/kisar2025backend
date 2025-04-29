@@ -847,6 +847,185 @@ app.get('/api/user-packages', (req, res) => {
 });
 
 
+
+// Create Instamojo order for package upgrade
+app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
+  try {
+    const { registration_id, package_id, amount } = req.body;
+
+    // Validate inputs
+    if (!registration_id || !package_id || !amount) {
+      return res.status(400).json({ error: "registration_id, package_id, and amount are required" });
+    }
+
+    const INSTAMOJO_API_KEY = "0cb75fd5924ef24ef42dd7a202a4d773";
+    const INSTAMOJO_AUTH_TOKEN = "432d3e19bdcf4f6fc0d2f4e71674f868";
+    const INSTAMOJO_API_URL = "https://www.instamojo.com/api/1.1/payment-requests/";
+
+    // Fetch user details
+    const userQuery = `
+      SELECT honorific, first_name, middle_name, last_name, email, phone, package_ids
+      FROM event_registrations
+      WHERE id = ? AND payment_status = 'SUCCESS'
+    `;
+    const userResult = await query(userQuery, [registration_id]);
+    if (!userResult.length) {
+      return res.status(404).json({ error: "User not found or no successful registration" });
+    }
+    const user = userResult[0];
+
+    // Fetch package details
+    const packageQuery = `
+      SELECT name, price
+      FROM packages
+      WHERE id = ? AND type = 'MAIN' AND active = 1
+    `;
+    const packageResult = await query(packageQuery, [package_id]);
+    if (!packageResult.length) {
+      return res.status(404).json({ error: "Package not found or not available" });
+    }
+    const package = packageResult[0];
+
+    // Validate amount
+    if (parseFloat(amount) !== parseFloat(package.price)) {
+      return res.status(400).json({ error: "Amount does not match package price" });
+    }
+
+    // Prepare buyer name
+    const buyerName = `${user.honorific || ""} ${user.first_name} ${user.middle_name || ""} ${user.last_name}`.trim();
+
+    // Create Instamojo payment request
+    const paymentData = {
+      purpose: `Upgrade to Package: ${package.name}`,
+      amount: amount,
+      buyer_name: buyerName,
+      email: user.email,
+      phone: user.phone,
+      redirect_url: "https://kisar2025.vercel.app/payment-success",
+      webhook: "https://srv742265.hstgr.cloud/api/upgrade-webhook",
+      send_email: true,
+      send_sms: true,
+      allow_repeated_payments: false,
+    };
+
+    const response = await axios.post(INSTAMOJO_API_URL, querystring.stringify(paymentData), {
+      headers: {
+        "X-Api-Key": INSTAMOJO_API_KEY,
+        "X-Auth-Token": INSTAMOJO_AUTH_TOKEN,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+
+    // Update event_registrations with pending payment
+    const updateQuery = `
+      UPDATE event_registrations
+      SET payment_id = ?, payment_status = 'PENDING', amount = ?, currency = 'INR'
+      WHERE id = ?
+    `;
+    await query(updateQuery, [response.data.payment_request.id, amount, registration_id]);
+
+    res.json({
+      payment_request: {
+        id: response.data.payment_request.id,
+        url: response.data.payment_request.longurl,
+      },
+    });
+  } catch (error) {
+    console.error("Error creating Instamojo upgrade payment request:", error.response?.data || error.message);
+    res.status(500).json({ error: "Failed to create payment request" });
+  }
+});
+
+// Webhook for package upgrade
+app.post("/api/upgrade-webhook", async (req, res) => {
+  try {
+    const {
+      amount,
+      buyer,
+      buyer_name,
+      buyer_phone,
+      currency,
+      fees,
+      payment_id,
+      payment_request_id,
+      status,
+      purpose,
+    } = req.body;
+
+    console.log("Upgrade webhook received:", req.body);
+
+    // Map Instamojo status to payment_status ENUM
+    const paymentStatus = status === "Credit" ? "SUCCESS" : "FAIL";
+
+    // Fetch registration
+    const registrationQuery = `
+      SELECT package_ids
+      FROM event_registrations
+      WHERE payment_id = ?
+    `;
+    const registrationResult = await query(registrationQuery, [payment_request_id]);
+    if (!registrationResult.length) {
+      console.warn(`No registration found for payment_request_id: ${payment_request_id}`);
+      return res.status(404).send("Registration not found");
+    }
+
+    // Update event_registrations
+    if (paymentStatus === "SUCCESS") {
+      // Extract package_id from purpose (e.g., "Upgrade to Package: Residential Single")
+      const packageName = purpose.replace("Upgrade to Package: ", "");
+      const packageQuery = `
+        SELECT id
+        FROM packages
+        WHERE name = ? AND type = 'MAIN' AND active = 1
+      `;
+      const packageResult = await query(packageQuery, [packageName]);
+      if (!packageResult.length) {
+        console.error(`Package not found for name: ${packageName}`);
+        return res.status(404).send("Package not found");
+      }
+      const packageId = packageResult[0].id;
+
+      // Update package_ids (replace with new package_id)
+      const updateQuery = `
+        UPDATE event_registrations
+        SET package_ids = ?,
+            payment_status = ?,
+            payment_id = ?,
+            amount = ?,
+            currency = ?,
+            fees = ?,
+            payment_date = NOW()
+        WHERE payment_id = ?
+      `;
+      await query(updateQuery, [
+        JSON.stringify([packageId]),
+        paymentStatus,
+        payment_id,
+        amount,
+        currency,
+        fees,
+        payment_request_id,
+      ]);
+    } else {
+      // Update only payment status for failed payments
+      const updateQuery = `
+        UPDATE event_registrations
+        SET payment_status = ?,
+            payment_id = ?,
+            payment_date = NOW()
+        WHERE payment_id = ?
+      `;
+      await query(updateQuery, [paymentStatus, payment_id, payment_request_id]);
+    }
+
+    res.status(200).send("Webhook received");
+  } catch (error) {
+    console.error("Error processing upgrade webhook:", error);
+    res.status(500).send("Error processing webhook");
+  }
+});
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
