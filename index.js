@@ -811,12 +811,7 @@ app.get('/api/user-packages', (req, res) => {
     console.log(`========== ${user}===================`)
     try {
       // Parse package_ids, default to empty array if null or invalid
-      packageIds = user.package_ids ? JSON.parse(user.package_ids) : [];
-      if (!Array.isArray(packageIds)) {
-        console.warn(`Invalid package_ids format for user ${user.id}:`, user.package_ids);
-        packageIds = [];
-      }
-      // Filter out non-numeric IDs
+      packageIds = user.package_ids
       packageIds = packageIds.filter(id => Number.isInteger(id) && id > 0);
     } catch (parseErr) {
       console.error(`Error parsing package_ids for user ${user.id}:`, parseErr);
