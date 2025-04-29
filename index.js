@@ -808,18 +808,20 @@ app.get('/api/user-packages', (req, res) => {
 
     const user = results[0];
     let packageIds = [];
-    try {
-      // Parse package_ids, default to empty array if null or invalid
-      packageIds = user.package_ids ? JSON.parse(user.package_ids) : [];
-      if (!Array.isArray(packageIds)) {
-        console.warn(`Invalid package_ids format for user ${user.id}: not an array`, user.package_ids);
-        packageIds = [];
-      }
-      packageIds = packageIds.filter(id => Number.isInteger(id) && id > 0);
-    } catch (parseErr) {
-      console.warn(`Error parsing package_ids for user ${user.id}:`, parseErr.message, user.package_ids);
-      packageIds = [];
-    }
+    // try {
+    //   // Parse package_ids, default to empty array if null or invalid
+    //   packageIds = user.package_ids ? JSON.parse(user.package_ids) : [];
+    //   if (!Array.isArray(packageIds)) {
+    //     console.warn(`Invalid package_ids format for user ${user.id}: not an array`, user.package_ids);
+    //     packageIds = [];
+    //   }
+    //   packageIds = packageIds.filter(id => Number.isInteger(id) && id > 0);
+    // } catch (parseErr) {
+    //   console.warn(`Error parsing package_ids for user ${user.id}:`, parseErr.message, user.package_ids);
+    //   packageIds = [];
+    // }
+
+    packageIds = user.package_ids;
 
     // Fetch all available MAIN packages
     connection.query(
@@ -851,6 +853,7 @@ app.get('/api/user-packages', (req, res) => {
   });
 });
 
+
 app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
   try {
     const { registration_id, package_id, amount } = req.body;
@@ -880,11 +883,12 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
 
     // Sanitize package_ids to ensure valid JSON
     let sanitizedPackageIds = '[]'; // Default to empty array
+    let parsedPackageIds = [];
     if (user.package_ids) {
       try {
-        const parsed = JSON.parse(user.package_ids);
-        if (Array.isArray(parsed)) {
-          sanitizedPackageIds = JSON.stringify(parsed);
+        parsedPackageIds = user.package_ids;
+        if (Array.isArray(parsedPackageIds)) {
+          sanitizedPackageIds = JSON.stringify(parsedPackageIds);
         } else {
           console.warn(`Invalid package_ids format for registration ${registration_id}: not an array`, user.package_ids);
         }
@@ -1029,10 +1033,37 @@ app.post("/api/upgrade-webhook", async (req, res) => {
         console.error(`Package not found for name: ${packageName}`);
         return res.status(404).send("Package not found");
       }
-      const packageId = packageResult[0].id;
+      const newPackageId = packageResult[0].id;
       const packagePrice = packageResult[0].price;
 
-      // Update package_ids (replace with new package_id)
+      // Fetch current package_ids and preserve non-MAIN packages
+      let currentPackageIds = registrationResult[0].package_ids
+      // try {
+      //   currentPackageIds = JSON.parse(registrationResult[0].package_ids || '[]');
+      //   if (!Array.isArray(currentPackageIds)) {
+      //     console.warn(`Invalid package_ids format for payment_request_id ${payment_request_id}: not an array`);
+      //     currentPackageIds = [];
+      //   }
+      // } catch (error) {
+      //   console.warn(`Error parsing package_ids for payment_request_id ${payment_request_id}:`, error.message);
+      //   currentPackageIds = [];
+      // }
+
+      // Fetch package types to identify non-MAIN packages
+      const packageTypeQuery = `
+        SELECT id, type
+        FROM packages
+        WHERE id IN (?)
+      `;
+      const packageTypesResult = await query(packageTypeQuery, [currentPackageIds]);
+      const nonMainPackageIds = packageTypesResult
+        .filter(pkg => pkg.type !== 'MAIN')
+        .map(pkg => pkg.id);
+
+      // Combine non-MAIN package IDs with the new MAIN package ID
+      const updatedPackageIds = [...nonMainPackageIds, newPackageId];
+
+      // Update package_ids (preserve non-MAIN, add new MAIN package_id)
       const updateQuery = `
         UPDATE event_registrations
         SET package_ids = ?,
@@ -1045,7 +1076,7 @@ app.post("/api/upgrade-webhook", async (req, res) => {
         WHERE payment_id = ?
       `;
       await query(updateQuery, [
-        JSON.stringify([packageId]),
+        JSON.stringify(updatedPackageIds),
         paymentStatus,
         payment_id,
         packagePrice,
