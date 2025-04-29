@@ -778,7 +778,7 @@ app.get('/api/packages/reg-count', (req, res) => {
   });
 });
 
-// GET /api/user-packages?query=EMAIL_OR_PHONE
+
 app.get('/api/user-packages', (req, res) => {
   const search = req.query.query?.trim();
   if (!search) {
@@ -787,7 +787,7 @@ app.get('/api/user-packages', (req, res) => {
 
   // Case-insensitive search for email, name, or phone
   const sql = `
-    SELECT id, honorific, first_name, middle_name, last_name, email, phone, package_ids
+    SELECT id, honorific, first_name, middle_name, last_name, email, phone, package_ids, amount, fees
     FROM event_registrations
     WHERE (
       LOWER(email) = LOWER(?) OR
@@ -808,13 +808,16 @@ app.get('/api/user-packages', (req, res) => {
 
     const user = results[0];
     let packageIds = [];
-    console.log(`========== ${user}===================`)
     try {
       // Parse package_ids, default to empty array if null or invalid
-      packageIds = user.package_ids
+      packageIds = user.package_ids ? JSON.parse(user.package_ids) : [];
+      if (!Array.isArray(packageIds)) {
+        console.warn(`Invalid package_ids format for user ${user.id}: not an array`, user.package_ids);
+        packageIds = [];
+      }
       packageIds = packageIds.filter(id => Number.isInteger(id) && id > 0);
     } catch (parseErr) {
-      console.error(`Error parsing package_ids for user ${user.id}:`, parseErr);
+      console.warn(`Error parsing package_ids for user ${user.id}:`, parseErr.message, user.package_ids);
       packageIds = [];
     }
 
@@ -838,6 +841,8 @@ app.get('/api/user-packages', (req, res) => {
             email: user.email,
             phone: user.phone,
             package_ids: packageIds,
+            amount: user.amount,
+            fees: user.fees,
           },
           allPackages: allPackages || [],
         });
@@ -846,9 +851,6 @@ app.get('/api/user-packages', (req, res) => {
   });
 });
 
-
-
-// Create Instamojo order for package upgrade
 app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
   try {
     const { registration_id, package_id, amount } = req.body;
@@ -891,9 +893,9 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
       }
     }
 
-    // Fetch new package details (for name only, no price validation)
+    // Fetch new package details (name and price)
     const packageQuery = `
-      SELECT name
+      SELECT name, price
       FROM packages
       WHERE id = ? AND type = 'MAIN' AND active = 1
     `;
@@ -938,7 +940,7 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
     // Prepare buyer name
     const buyerName = `${user.honorific || ""} ${user.first_name} ${user.middle_name || ""} ${user.last_name}`.trim();
 
-    // Create Instamojo payment request
+    // Create Instamojo payment request with frontend-provided amount
     const paymentData = {
       purpose: `Upgrade to Package: ${newPackage.name}`,
       amount: amount,
@@ -960,13 +962,13 @@ app.post("/api/create-upgrade-order-instamojo", async (req, res) => {
       },
     });
 
-    // Update event_registrations with pending payment
+    // Update event_registrations with pending payment and new package price
     const updateQuery = `
       UPDATE event_registrations
       SET payment_id = ?, payment_status = 'PENDING', amount = ?, currency = 'INR'
       WHERE id = ?
     `;
-    await query(updateQuery, [response.data.payment_request.id, amount, registration_id]);
+    await query(updateQuery, [response.data.payment_request.id, newPackage.price, registration_id]);
 
     res.json({
       payment_request: {
@@ -1018,7 +1020,7 @@ app.post("/api/upgrade-webhook", async (req, res) => {
       // Extract package_id from purpose (e.g., "Upgrade to Package: Residential Single")
       const packageName = purpose.replace("Upgrade to Package: ", "");
       const packageQuery = `
-        SELECT id
+        SELECT id, price
         FROM packages
         WHERE name = ? AND type = 'MAIN' AND active = 1
       `;
@@ -1028,6 +1030,7 @@ app.post("/api/upgrade-webhook", async (req, res) => {
         return res.status(404).send("Package not found");
       }
       const packageId = packageResult[0].id;
+      const packagePrice = packageResult[0].price;
 
       // Update package_ids (replace with new package_id)
       const updateQuery = `
@@ -1045,7 +1048,7 @@ app.post("/api/upgrade-webhook", async (req, res) => {
         JSON.stringify([packageId]),
         paymentStatus,
         payment_id,
-        amount,
+        packagePrice,
         currency,
         fees,
         payment_request_id,
