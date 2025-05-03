@@ -1274,10 +1274,12 @@ app.post('/api/sessions/:id/enter', async (req, res) => {
 });
 
 
-// ✅ Get session stats (attendee count + detailed list)
+// ✅ Get session stats (attendee count + detailed list + sponsors)
 app.get('/api/sessions/:id/attendees', async (req, res) => {
   const { id } = req.params;
+
   try {
+    // Fetch regular attendees
     const attendees = await query(`
       SELECT 
         sa.registration_id,
@@ -1292,11 +1294,29 @@ app.get('/api/sessions/:id/attendees', async (req, res) => {
       WHERE sa.session_id = ?
     `, [id]);
 
+    // Fetch sponsor attendees
+    const sponsors = await query(`
+      SELECT 
+        ssa.sponsor_id,
+        ssa.login_time,
+        es.name,
+        es.email,
+        es.phone,
+        es.organization
+      FROM session_sponsor_attend ssa
+      JOIN event_sponsors es ON ssa.sponsor_id = es.reference_id
+      WHERE ssa.session_id = ?
+    `, [id]);
+
     res.json({
-      count: attendees.length,
-      attendees
+      attendee_count: attendees.length,
+      sponsor_count: sponsors.length,
+      attendees,
+      sponsors
     });
+
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
