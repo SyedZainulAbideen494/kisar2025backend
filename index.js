@@ -1272,6 +1272,8 @@ app.post('/api/sessions/:id/enter', async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+
 // ✅ Get session stats (attendee count + detailed list)
 app.get('/api/sessions/:id/attendees', async (req, res) => {
   const { id } = req.params;
@@ -1286,7 +1288,7 @@ app.get('/api/sessions/:id/attendees', async (req, res) => {
         er.last_name,
         er.email
       FROM session_attendance sa
-      JOIN event_registrations er ON sa.registration_id = er.id
+      JOIN event_registrations er ON sa.registration_id = er.payment_id
       WHERE sa.session_id = ?
     `, [id]);
 
