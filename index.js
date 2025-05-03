@@ -22,6 +22,7 @@ const cron = require('node-cron');
 const schedule = require("node-schedule");
 const pdfParse = require('pdf-parse');
 const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
 const webPush = require('web-push');
 const Razorpay = require('razorpay');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
@@ -1337,6 +1338,39 @@ app.get('/api/analytics/logins', async (req, res) => {
   }
 });
 
+app.post('/api/sponsors/register', async (req, res) => {
+  const { name, phone, email, organization } = req.body;
+
+  if (!name || !phone || !email) {
+    return res.status(400).json({ error: "Name, phone, and email are required." });
+  }
+
+  const id = uuidv4();               // Primary UUID
+  const reference_id = uuidv4();     // Secondary UUID
+
+  try {
+    await query(
+      `INSERT INTO event_sponsors (id, reference_id, name, phone, email, organization)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [id, reference_id, name, phone, email, organization || null]
+    );
+
+    res.json({ success: true, sponsor_id: id, reference_id });
+  } catch (err) {
+    console.error("Sponsor registration failed:", err);
+    res.status(500).json({ error: "Failed to register sponsor" });
+  }
+});
+
+app.get('/api/sponsors', async (req, res) => {
+  try {
+    const sponsors = await query(`SELECT * FROM event_sponsors ORDER BY created_at DESC`);
+    res.json(sponsors);
+  } catch (err) {
+    console.error("Failed to fetch sponsors:", err);
+    res.status(500).json({ error: "Failed to fetch sponsors" });
+  }
+});
 
 
 // Start the server
