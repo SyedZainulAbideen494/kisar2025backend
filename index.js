@@ -1125,6 +1125,181 @@ app.post("/api/upgrade-webhook", async (req, res) => {
 });
 
 
+
+// event admin pannel
+
+// Fetch all successful registrations
+app.get("/api/registrations/event-admin", async (req, res) => {
+  try {
+    const results = await query("SELECT * FROM event_registrations WHERE payment_status = 'SUCCESS'");
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get details of a specific user
+app.get("/api/registrations/event-admin/:id", async (req, res) => {
+  try {
+    const results = await query("SELECT * FROM event_registrations WHERE id = ?", [req.params.id]);
+    res.json(results[0]);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Log in a user to event
+app.post("/api/logins/event-admin", async (req, res) => {
+  const { registration_id } = req.body;
+  try {
+    await query("INSERT IGNORE INTO event_logins (registration_id) VALUES (?)", [registration_id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Register user
+app.post('/api/register/event/admin', async (req, res) => {
+  const {
+    honorific,
+    first_name,
+    middle_name,
+    last_name,
+    email,
+    phone,
+    address,
+    city,
+    state,
+    pincode,
+    med_council_number,
+    category,
+    type,
+    package_ids
+  } = req.body;
+
+  const payment_id = `PAY_${Date.now()}`;
+  const payment_status = 'SUCCESS';
+  const amount = 0;
+  const currency = 'INR';
+  const fees = 0;
+
+  try {
+    await query(
+      `INSERT INTO event_registrations 
+        (honorific, first_name, middle_name, last_name, email, phone, address, city, state, pincode, med_council_number, category, type, package_ids, payment_id, payment_status, amount, currency, fees) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        honorific,
+        first_name,
+        middle_name,
+        last_name,
+        email,
+        phone,
+        address,
+        city,
+        state,
+        pincode,
+        med_council_number,
+        category,
+        type,
+        JSON.stringify(package_ids),
+        payment_id,
+        'SUCCESS',
+        0,
+        'INR',
+        0
+      ]
+    );
+    
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Registration failed:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ✅ Get all sessions
+app.get('/api/sessions', async (req, res) => {
+  try {
+    const sessions = await query('SELECT * FROM sessions ORDER BY id DESC');
+    res.json(sessions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Create a session
+app.post('/api/sessions', async (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Session name required' });
+
+  try {
+    await query('INSERT INTO sessions (name, is_active) VALUES (?, TRUE)', [name]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ End a session
+app.post('/api/sessions/:id/end', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await query('UPDATE sessions SET is_active = FALSE WHERE id = ?', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ✅ Register person into a session (e.g., via scanner later)
+app.post('/api/sessions/:id/enter', async (req, res) => {
+  const { id } = req.params; // session_id
+  const { registration_id } = req.body;
+
+  if (!registration_id) return res.status(400).json({ error: 'registration_id required' });
+
+  try {
+    await query(
+      'INSERT INTO session_attendance (registration_id, session_id) VALUES (?, ?)',
+      [registration_id, id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// ✅ Get session stats (attendee count + detailed list)
+app.get('/api/sessions/:id/attendees', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const attendees = await query(`
+      SELECT 
+        sa.registration_id,
+        sa.timestamp,
+        er.honorific,
+        er.first_name,
+        er.middle_name,
+        er.last_name,
+        er.email
+      FROM session_attendance sa
+      JOIN event_registrations er ON sa.registration_id = er.id
+      WHERE sa.session_id = ?
+    `, [id]);
+
+    res.json({
+      count: attendees.length,
+      attendees
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
