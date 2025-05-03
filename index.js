@@ -1299,6 +1299,45 @@ app.get('/api/sessions/:id/attendees', async (req, res) => {
 });
 
 
+app.get('/api/analytics/logins', async (req, res) => {
+  try {
+    const loginData = await query(`
+      SELECT el.registration_id, el.login_time, er.*, er.package_ids
+      FROM event_logins el
+      JOIN event_registrations er ON el.registration_id = er.id
+      ORDER BY el.login_time DESC
+    `);
+
+    for (let login of loginData) {
+      let pkgIds = [];
+
+      // Safely parse package_ids (in case it's stored as a string)
+      try {
+        if (typeof login.package_ids === 'string') {
+          pkgIds = JSON.parse(login.package_ids);
+        } else if (Array.isArray(login.package_ids)) {
+          pkgIds = login.package_ids;
+        }
+      } catch (e) {
+        console.warn(`Invalid JSON in package_ids for registration_id ${login.registration_id}`);
+      }
+
+      // Only fetch names if we have IDs
+      const pkgNames = pkgIds.length
+        ? await query(`SELECT name FROM packages WHERE id IN (${pkgIds.map(() => '?').join(',')})`, pkgIds)
+        : [];
+
+      login.package_names = pkgNames.map(p => p.name);
+    }
+
+    res.json(loginData);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch login analytics' });
+  }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
