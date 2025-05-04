@@ -41,7 +41,6 @@ async def generate_invoice(request: InvoiceRequest):
         instamojo_payment_id = request.instamojoPaymentId
         items = request.items
         recipient_email = "mohammedfaisal3366@gmail.com"
-        instamojo_fees = float(request.fees)  # Fees are already in INR
 
         # Calculate totals
         basic_value = sum(float(item.amount) for item in items)
@@ -55,6 +54,14 @@ async def generate_invoice(request: InvoiceRequest):
         total_tax = cgst + sgst + igst
         subtotal = taxable_value
         total = taxable_value + total_tax
+
+        # Calculate Instamojo fees: 3% of total + 18% GST on that 3% + Rs. 3 fixed
+        base_fee = total * 0.03  # 3% of total
+        gst_on_fee = base_fee * 0.18  # 18% GST on the 3% fee
+        fixed_fee = 3.0  # Rs. 3 fixed
+        instamojo_fees = base_fee + gst_on_fee + fixed_fee
+
+        # Calculate grand total
         grand_total = total + instamojo_fees
         amount_in_words = num2words(grand_total, lang='en').replace(',', '').title() + " Rupees Only"
 
@@ -80,6 +87,7 @@ async def generate_invoice(request: InvoiceRequest):
 
         # Items Table
         items_table = doc.add_table(rows=1, cols=3)
+        items_table.style FaustAPI for generating PDF documents
         items_table.style = 'Table Grid'
         hdr_cells = items_table.rows[0].cells
         hdr_cells[0].text = "DESCRIPTION"
@@ -143,7 +151,7 @@ async def generate_invoice(request: InvoiceRequest):
         # Save the document
         sanitized_bill_to = "".join(c if c.isalnum() else "_" for c in bill_to)
         filename = f"{sanitized_bill_to}_{instamojo_payment_id}.docx"
-        folder_path = os.path.join(os.getcwd(), "invoices","new")
+        folder_path = os.path.join(os.getcwd(), "invoices", "new")
         os.makedirs(folder_path, exist_ok=True)
         file_path = os.path.join(folder_path, filename)
 
@@ -173,6 +181,21 @@ async def generate_invoice(request: InvoiceRequest):
                 body {{
                     font-family: Arial, sans-serif;
                     background-color: #f4f4f4;
+                    margin: 0;
+                    padding: 0;
+                }}
+                .container {{
+                    max-width: 600px;
+                    margin: 20px auto;
+                    background-color: #ffffff;
+                    border-radius: 10px;
+                    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+                    overflow: hidden;
+                }}
+                .header {{
+                    background-color: #4CAF50;
+                    color: white;
+                   utura Sans', sans-serif;
                     margin: 0;
                     padding: 0;
                 }}
