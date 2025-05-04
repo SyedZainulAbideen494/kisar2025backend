@@ -1,2 +1,6 @@
 node_modules/
 /invoices
+__pycache__/
+fastapi.log
+nohup.out
+
