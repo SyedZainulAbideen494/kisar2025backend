@@ -363,4 +363,87 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
                     padding: 10px;
                     text-align: center;
                     font-size: 12px;
-                    color: #666
+                    color: #666;
+                }}
+                table {{
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 20px 0;
+                }}
+                th, td {{
+                    padding: 10px;
+                    text-align: left;
+                }}
+                th {{
+                    background-color: #f0f0f0;
+                    font-weight: bold;
+                }}
+                .total {{
+                    font-weight: bold;
+                    font-size: 16px;
+                }}
+                .payment-id {{
+                    font-size: 14px;
+                    color: #333;
+                    margin-top: 10px;
+                }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h2>Package Upgrade Confirmation</h2>
+                </div>
+                <div class="content">
+                    <p>Dear {bill_to},</p>
+                    <p>Your package for the <strong>10th Annual Conference 2025 - KISAR</strong> has been successfully upgraded. Below are the details:</p>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Package</th>
+                                <th>Amount Paid</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee;">{package_name}</td>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₹{amount:.2f}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <p class="payment-id">Instamojo Payment ID: {instamojo_payment_id}</p>
+                    <p class="total">Total Amount Paid: ₹{grand_total:.2f}</p>
+                    <p>Thank you for your continued participation. We look forward to seeing you at the event!</p>
+                    <p>Best regards,<br>Karnataka Chapter of ISAR</p>
+                </div>
+                <div class="footer">
+                    <p>Contact us at: kisar.office@gmail.com | © 2025 KISAR</p>
+                    <p>Powered By: © LYXN LABS</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        msg = MIMEText(html_content, 'html')
+        msg['From'] = sender_email
+        msg['To'] = recipient_email
+        msg['Cc'] = cc_email
+        msg['Subject'] = "Package Upgrade Confirmation - 10th Annual Conference 2025 KISAR"
+
+        recipients = [recipient_email, cc_email]
+
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(sender_email, sender_password)
+            server.sendmail(sender_email, recipients, msg.as_string())
+
+        return {"status": "OK"}
+
+    except Exception as e:
+        print(f"Error generating upgrade invoice: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to generate upgrade invoice")
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=4000)
