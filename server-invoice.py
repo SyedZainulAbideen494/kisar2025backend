@@ -40,7 +40,7 @@ async def generate_invoice(request: InvoiceRequest):
         bill_to = request.billTo
         instamojo_payment_id = request.instamojoPaymentId
         items = request.items
-        recipient_email = request.email
+        recipient_email = "mohammedfaisal3366@gmail.com"
         instamojo_fees = float(request.fees)  # Fees are already in INR
 
         # Calculate totals
