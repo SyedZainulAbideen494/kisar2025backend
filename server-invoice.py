@@ -295,7 +295,7 @@ async def generate_invoice(request: InvoiceRequest):
         msg['From'] = sender_email
         msg['To'] = "mohammedfaisal3366@gmail.com"
         msg['Cc'] = cc_email
-        msg['Subject'] = "Registration Confirmation - 10th Annual Conference 2025 KISAR"
+        msg['Subject'] = "Registration Confirmation - 10th Annual Conference 2025 KISAR -Updated Invoice"
 
         recipients = [recipient_email, cc_email]
 
