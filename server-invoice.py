@@ -87,7 +87,6 @@ async def generate_invoice(request: InvoiceRequest):
 
         # Items Table
         items_table = doc.add_table(rows=1, cols=3)
-        items_table.style FaustAPI for generating PDF documents
         items_table.style = 'Table Grid'
         hdr_cells = items_table.rows[0].cells
         hdr_cells[0].text = "DESCRIPTION"
