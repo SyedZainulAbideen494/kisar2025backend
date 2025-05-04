@@ -527,6 +527,88 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+app.get("/api/resend-invoice/:phone", async (req, res) => {
+  try {
+    const { phone } = req.params;
+
+    if (!phone) {
+      return res.status(400).json({ error: "Phone number is required" });
+    }
+
+    // Query to find successful payments for the given phone number
+    const registrationQuery = `
+      SELECT er.honorific, er.first_name, er.middle_name, er.last_name, er.email, er.payment_id, er.fees
+      FROM event_registrations er
+      WHERE er.phone = ? AND er.payment_status = 'SUCCESS'
+      LIMIT 1
+    `;
+    const registrationParams = [phone];
+    const registrationResult = await query(registrationQuery, registrationParams);
+
+    if (!registrationResult.length) {
+      return res.status(404).json({ error: "No successful payment found for this phone number" });
+    }
+
+    const { honorific, first_name, middle_name, last_name, email, payment_id, fees } = registrationResult[0];
+
+    // Construct billTo from user details
+    const billToParts = [];
+    if (honorific) billToParts.push(honorific);
+    if (first_name) billToParts.push(first_name);
+    if (middle_name) billToParts.push(middle_name);
+    if (last_name) billToParts.push(last_name);
+    const billTo = billToParts.join(" ") || "Customer";
+
+    // Fetch package details
+    const packageQuery = `
+      SELECT p.name, p.price
+      FROM event_registrations er
+      JOIN packages p ON JSON_CONTAINS(er.package_ids, CAST(p.id AS JSON))
+      WHERE er.payment_id = ?
+    `;
+    const packageParams = [payment_id];
+    const packageResult = await query(packageQuery, packageParams);
+
+    if (!packageResult.length) {
+      return res.status(404).json({ error: `No packages found for payment_id: ${payment_id}` });
+    }
+
+    // Calculate base amounts excluding 18% GST
+    const gstRate = 0.18; // 9% CGST + 9% SGST
+    const items = packageResult.map(pkg => {
+      const priceWithGst = parseFloat(pkg.price);
+      const basePrice = priceWithGst / (1 + gstRate); // Remove GST
+      return {
+        description: pkg.name,
+        sacCode: "9995", // Fixed SAC code
+        amount: basePrice.toFixed(2) // Base amount excluding GST
+      };
+    });
+
+    // Payload for Python API
+    const invoicePayload = {
+      date: new Date().toLocaleDateString("en-GB"), // Current date in DD/MM/YYYY
+      invoiceNo: "0", // Fixed invoice number
+      billTo: billTo,
+      instamojoPaymentId: payment_id,
+      email: email,
+      items: items,
+      fees: fees ? fees.toString() : "0" // Placeholder, not used by FastAPI
+    };
+
+    // Call Python FastAPI endpoint
+    await axios.post("http://localhost:4000/api/generate-invoice", invoicePayload, {
+      headers: { "Content-Type": "application/json" }
+    });
+
+    console.log(`Invoice resent and email sent for payment_id: ${payment_id}`);
+    res.status(200).json({ status: "Invoice resent successfully" });
+  } catch (error) {
+    console.error("Error resending invoice:", error);
+    res.status(500).json({ error: "Failed to resend invoice" });
+  }
+});
+
 
 // Verify Payment & Store Registration
 app.post("/verify-payment", async (req, res) => {
