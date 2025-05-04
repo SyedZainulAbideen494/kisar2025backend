@@ -57,9 +57,9 @@ async def generate_invoice(request: InvoiceRequest):
 
         # Calculate Instamojo fees: 3% of total + 18% GST on that 3% + Rs. 3 fixed
         base_fee = total * 0.03  # 3% of total
-        gst_on_fee = base_fee * 0.18  # 18% GST on the 3% fee
         fixed_fee = 3.0  # Rs. 3 fixed
-        instamojo_fees = base_fee + gst_on_fee + fixed_fee
+        gst_on_fee = (base_fee+fixed_fee) * 0.18  # 18% GST on the 3% fee
+        instamojo_fees = base_fee + gst_on_fee
 
         # Calculate grand total
         grand_total = total + instamojo_fees
@@ -121,7 +121,7 @@ async def generate_invoice(request: InvoiceRequest):
             ("Total Tax:", f"₹{total_tax:.2f}"),
             ("Subtotal:", f"₹{subtotal:.2f}"),
             ("Total:", f"₹{total:.2f}"),
-            ("Payment convenience Fee (3% on total amount + 18% GST + Rs.3 ):", f"₹{instamojo_fees:.2f}"),
+            ("Payment convenience Fee (3% on total amount + Rs.3 + 18% GST ):", f"₹{instamojo_fees:.2f}"),
             ("Grand Total:", f"₹{grand_total:.2f}"),
         ]
 
@@ -270,7 +270,7 @@ async def generate_invoice(request: InvoiceRequest):
                             <td style="padding: 10px; text-align: right; font-weight: bold;">₹{total:.2f}</td>
                         </tr>
                         <tr>
-                            <td style="padding: 10px;">Payment convenience Fee (3% on total amount + 18% GST + Rs.3 ):</td>
+                            <td style="padding: 10px;">Payment convenience Fee (3% on total amount + Rs.3 + 18% GST ):</td>
                             <td style="padding: 10px; text-align: right;">₹{instamojo_fees:.2f}</td>
                         </tr>
                         <tr>
