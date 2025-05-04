@@ -40,7 +40,7 @@ async def generate_invoice(request: InvoiceRequest):
         bill_to = request.billTo
         instamojo_payment_id = request.instamojoPaymentId
         items = request.items
-        recipient_email = "mohammedfaisal3366@gmail.com"
+        recipient_email = request.email
 
         # Calculate totals
         basic_value = sum(float(item.amount) for item in items)
@@ -294,7 +294,7 @@ async def generate_invoice(request: InvoiceRequest):
 
         msg = MIMEText(html_content, 'html')
         msg['From'] = sender_email
-        msg['To'] = "mohammedfaisal3366@gmail.com"
+        msg['To'] = recipient_email
         msg['Cc'] = cc_email
         msg['Subject'] = "Registration Confirmation - 10th Annual Conference 2025 KISAR -Updated Invoice"
 
