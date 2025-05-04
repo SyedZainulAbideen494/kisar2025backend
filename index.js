@@ -486,7 +486,8 @@ app.post("/webhook", async (req, res) => {
         billTo: buyer_name || "Customer",
         instamojoPaymentId: payment_id,
         email: buyer,
-        items: items
+        items: items,
+        fees: fees.toString()
       };
 
       // Call Python FastAPI endpoint

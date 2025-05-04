@@ -22,6 +22,7 @@ class InvoiceRequest(BaseModel):
     instamojoPaymentId: str
     items: list[Item]
     email: str
+    fees: str  # Field for Instamojo fees
 
 class UpgradeInvoiceRequest(BaseModel):
     billTo: str
@@ -40,6 +41,7 @@ async def generate_invoice(request: InvoiceRequest):
         instamojo_payment_id = request.instamojoPaymentId
         items = request.items
         recipient_email = request.email
+        instamojo_fees = float(request.fees)  # Fees are already in INR
 
         # Calculate totals
         basic_value = sum(float(item.amount) for item in items)
@@ -51,7 +53,9 @@ async def generate_invoice(request: InvoiceRequest):
         sgst = taxable_value * sgst_rate
         igst = taxable_value * igst_rate
         total_tax = cgst + sgst + igst
-        grand_total = taxable_value + total_tax
+        subtotal = taxable_value
+        total = taxable_value + total_tax
+        grand_total = total + instamojo_fees
         amount_in_words = num2words(grand_total, lang='en').replace(',', '').title() + " Rupees Only"
 
         # Create DOCX document
@@ -59,7 +63,7 @@ async def generate_invoice(request: InvoiceRequest):
 
         # Header
         doc.add_heading("Karnataka Chapter of The India Society for Assisted Reproduction", level=2).alignment = 1  # Center
-        doc.add_paragraph("No.1, 1st Floor, UMA Admiralty,\\nBannerugatta Road, Bangalore - 560029.\\nGSTIN: 29AABAK4261H2ZL", style='Normal').alignment = 1
+        doc.add_paragraph("No.1, 1st Floor, UMA Admiralty,\nBannerugatta Road, Bangalore - 560029.\nGSTIN: 29AABAK4261H2ZL", style='Normal').alignment = 1
 
         # Invoice Details
         doc.add_heading("GST INVOICE", level=3)
@@ -93,8 +97,8 @@ async def generate_invoice(request: InvoiceRequest):
         # Spacer paragraph before totals table
         doc.add_paragraph("", style='Normal').paragraph_format.space_after = 240  # Approx 12pt spacing
 
-        # Totals Table (Separate from Items)
-        totals_table = doc.add_table(rows=7, cols=2)
+        # Totals Table (Includes all requested fields)
+        totals_table = doc.add_table(rows=10, cols=2)
         totals_table.style = 'Table Grid'
         totals_table.autofit = False
         totals_table.columns[0].width = 3000000  # Approx 50% width
@@ -108,6 +112,9 @@ async def generate_invoice(request: InvoiceRequest):
             ("SGST (9%):", f"₹{sgst:.2f}"),
             ("IGST (0%):", f"₹{igst:.2f}"),
             ("Total Tax:", f"₹{total_tax:.2f}"),
+            ("Subtotal:", f"₹{subtotal:.2f}"),
+            ("Total:", f"₹{total:.2f}"),
+            ("Payment Gateway Fee (Instamojo):", f"₹{instamojo_fees:.2f}"),
             ("Grand Total:", f"₹{grand_total:.2f}"),
         ]
 
@@ -116,11 +123,11 @@ async def generate_invoice(request: InvoiceRequest):
             row_cells[0].text = label
             row_cells[1].text = value
             row_cells[1].paragraphs[0].alignment = 2  # Right align value
-            if label == "Grand Total:":
+            if label in ["Total:", "Grand Total:"]:
                 row_cells[0].paragraphs[0].runs[0].bold = True
                 row_cells[1].paragraphs[0].runs[0].bold = True
 
-        # Spacer paragraph before Amount in Words (increased spacing)
+        # Spacer paragraph before Amount in Words
         doc.add_paragraph("", style='Normal').paragraph_format.space_after = 480  # Approx 24pt spacing
 
         # Amount in Words
@@ -136,15 +143,15 @@ async def generate_invoice(request: InvoiceRequest):
         # Save the document
         sanitized_bill_to = "".join(c if c.isalnum() else "_" for c in bill_to)
         filename = f"{sanitized_bill_to}_{instamojo_payment_id}.docx"
-        folder_path = os.path.join(os.getcwd(), "invoices")
+        folder_path = os.path.join(os.getcwd(), "invoices","new")
         os.makedirs(folder_path, exist_ok=True)
         file_path = os.path.join(folder_path, filename)
 
         doc.save(file_path)
 
-        # Send confirmation email with stylish HTML/CSS template
-        sender_email = "labslyxn@gmail.com"  # Replace with your Gmail
-        sender_password = "iwjnveuscunamwgs"  # Replace with app-specific password
+        # Send confirmation email with updated HTML/CSS template
+        sender_email = "labslyxn@gmail.com"
+        sender_password = "iwjnveuscunamwgs"
         cc_email = "mfaisal.pla@gmail.com"
 
         # Generate items table for email
@@ -157,6 +164,7 @@ async def generate_invoice(request: InvoiceRequest):
             """ for item in items
         )
 
+        # Email template with all fields
         html_content = f"""
         <!DOCTYPE html>
         <html>
@@ -237,8 +245,33 @@ async def generate_invoice(request: InvoiceRequest):
                             {items_html}
                         </tbody>
                     </table>
+                    <table>
+                        <tr>
+                            <td style="padding: 10px;">Subtotal:</td>
+                            <td style="padding: 10px; text-align: right;">₹{subtotal:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px;">CGST (9%):</td>
+                            <td style="padding: 10px; text-align: right;">₹{cgst:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px;">SGST (9%):</td>
+                            <td style="padding: 10px; text-align: right;">₹{sgst:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px;">Total:</td>
+                            <td style="padding: 10px; text-align: right; font-weight: bold;">₹{total:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px;">Payment Gateway Fee (Instamojo):</td>
+                            <td style="padding: 10px; text-align: right;">₹{instamojo_fees:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px;">Grand Total:</td>
+                            <td style="padding: 10px; text-align: right; font-weight: bold;">₹{grand_total:.2f}</td>
+                        </tr>
+                    </table>
                     <p class="payment-id">Instamojo Payment ID: {instamojo_payment_id}</p>
-                    <p class="total">Total Amount: ₹{grand_total:.2f}</p>
                     <p>We look forward to seeing you at the event!</p>
                     <p>Best regards,<br>Karnataka Chapter of ISAR</p>
                 </div>
@@ -284,9 +317,9 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
         grand_total = amount
 
         # Send confirmation email with stylish HTML/CSS template
-        sender_email = "labslyxn@gmail.com"  # Replace with your Gmail
-        sender_password = "iwjnveuscunamwgs"  # Replace with app-specific password
-        cc_email ="mfaisal.pla@gmail.com"
+        sender_email = "labslyxn@gmail.com"
+        sender_password = "iwjnveuscunamwgs"
+        cc_email = "mfaisal.pla@gmail.com"
 
         html_content = f"""
         <!DOCTYPE html>
@@ -332,7 +365,9 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
                 }}
                 th, td {{
                     padding: 10px;
-                    text-align: left;
+                    text-align
+
+: left;
                 }}
                 th {{
                     background-color: #f0f0f0;
