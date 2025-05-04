@@ -318,12 +318,21 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
         recipient_email = request.email
         instamojo_payment_id = request.instamojoPaymentId
         package_name = request.packageName
-        amount = float(request.amount)
+        basic_value = float(request.amount)  # Use request.amount as basic_value
 
-        # Calculate totals (upgrade amount is the paid difference, no GST applied)
-        grand_total = amount
+        # Calculate totals (no GST applied for upgrades)
+        total = basic_value
 
-        # Send confirmation email with stylish HTML/CSS template
+        # Calculate Instamojo fees: 3% of total + 18% GST on that 3% + Rs. 3 fixed
+        base_fee = total * 0.03  # 3% of total
+        fixed_fee = 3.0  # Rs. 3 fixed
+        gst_on_fee = (base_fee+fixed_fee) * 0.18  # 18% GST on the 3% fee
+        instamojo_fees = base_fee + gst_on_fee
+
+        # Calculate grand total
+        grand_total = total + instamojo_fees
+
+        # Send confirmation email with updated HTML/CSS template
         sender_email = "labslyxn@gmail.com"
         sender_password = "iwjnveuscunamwgs"
         cc_email = "mfaisal.pla@gmail.com"
@@ -401,19 +410,32 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
                         <thead>
                             <tr>
                                 <th>Package</th>
-                                <th>Amount Paid</th>
+                                <th>Amount</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
                                 <td style="padding: 10px; border-bottom: 1px solid #eee;">{package_name}</td>
-                                <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₹{amount:.2f}</td>
+                                <td style="padding: 10px; border-bottom: 1px solid #eee; text-align: right;">₹{basic_value:.2f}</td>
                             </tr>
                         </tbody>
                     </table>
+                    <table>
+                        <tr>
+                            <td style="padding: 10px;">Subtotal:</td>
+                            <td style="padding: 10px; text-align: right;">₹{total:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px;">Payment convenience Fee (3% on total amount +  Rs.3 +18% GST ):</td>
+                            <td style="padding: 10px; text-align: right;">₹{instamojo_fees:.2f}</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 10px;">Grand Total:</td>
+                            <td style="padding: 10px; text-align: right; font-weight: bold;">₹{grand_total:.2f}</td>
+                        </tr>
+                    </table>
                     <p class="payment-id">Instamojo Payment ID: {instamojo_payment_id}</p>
-                    <p class="total">Total Amount Paid: ₹{grand_total:.2f}</p>
-                    <p>Thank you for your continued participation. We look forward to seeing you at the event!</p>
+                    <p>We look forward to seeing you at the event!</p>
                     <p>Best regards,<br>Karnataka Chapter of ISAR</p>
                 </div>
                 <div class="footer">
