@@ -58,8 +58,9 @@ async def generate_invoice(request: InvoiceRequest):
         # Calculate Instamojo fees: 3% of total + 18% GST on that 3% + Rs. 3 fixed
         base_fee = total * 0.03  # 3% of total
         fixed_fee = 3.0  # Rs. 3 fixed
-        gst_on_fee = (base_fee+fixed_fee) * 0.18  # 18% GST on the 3% fee
-        instamojo_fees = base_fee + gst_on_fee
+        instamojo_taxable_value = base_fee + fixed_fee
+        gst_on_fee = instamojo_taxable_value * 0.18  # 18% GST on the 3% fee
+        instamojo_fees = instamojo_taxable_value + gst_on_fee
 
         # Calculate grand total
         grand_total = total + instamojo_fees
@@ -326,8 +327,9 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
         # Calculate Instamojo fees: 3% of total + 18% GST on that 3% + Rs. 3 fixed
         base_fee = total * 0.03  # 3% of total
         fixed_fee = 3.0  # Rs. 3 fixed
-        gst_on_fee = (base_fee+fixed_fee) * 0.18  # 18% GST on the 3% fee
-        instamojo_fees = base_fee + gst_on_fee
+        instamojo_taxable_value = base_fee + fixed_fee
+        gst_on_fee = instamojo_taxable_value * 0.18  # 18% GST on the 3% fee
+        instamojo_fees = instamojo_taxable_value + gst_on_fee
 
         # Calculate grand total
         grand_total = total + instamojo_fees
