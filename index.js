@@ -1492,6 +1492,8 @@ app.post('/api/scan', async (req, res) => {
           'SELECT id FROM sessions WHERE is_active = 1 LIMIT 1'
       );
 
+      console.log(sessions);
+
       if(!sessions){
         return res.status(400).json({ error: 'no active session' });
       }
@@ -1510,12 +1512,12 @@ app.post('/api/scan', async (req, res) => {
           );
 
           if(sponsorAttendance){
-            return res.status(400).json({ error: 'Sponsor already present' });
+            if (sponsorAttendance.length > 0) {
+              return res.status(400).json({ error: 'Sponsor already present' });
+            }
           }
 
-          if (sponsorAttendance.length > 0) {
-              return res.status(400).json({ error: 'Sponsor already present' });
-          }
+          
 
           // Add sponsor attendance
           await query(
