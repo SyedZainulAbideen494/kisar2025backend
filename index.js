@@ -1498,18 +1498,20 @@ app.post('/api/scan', async (req, res) => {
 
     const sessionId = sessions[0].id;
 
-    // Check if scan_id exists as a sponsor in event_sponsors
+    // Check if scan_id exists as a sponsor reference_id in event_sponsors
     let sponsorsResult = await query(
-      'SELECT id FROM event_sponsors WHERE id = ?',
+      'SELECT id FROM event_sponsors WHERE reference_id = ?',
       [scan_id]
     );
     const sponsors = Array.isArray(sponsorsResult) ? sponsorsResult : sponsorsResult ? [sponsorsResult] : [];
 
     if (sponsors.length > 0) {
+      const sponsorId = sponsors[0].id;
+
       // Handle sponsor case
       let sponsorAttendanceResult = await query(
         'SELECT id FROM session_sponsor_attend WHERE session_id = ? AND sponsor_id = ?',
-        [sessionId, scan_id]
+        [sessionId, sponsorId]
       );
       const sponsorAttendance = Array.isArray(sponsorAttendanceResult) ? sponsorAttendanceResult : sponsorAttendanceResult ? [sponsorAttendanceResult] : [];
 
@@ -1520,7 +1522,7 @@ app.post('/api/scan', async (req, res) => {
       // Add sponsor attendance
       await query(
         'INSERT INTO session_sponsor_attend (session_id, sponsor_id) VALUES (?, ?)',
-        [sessionId, scan_id]
+        [sessionId, sponsorId]
       );
 
       return res.status(200).json({ message: 'sponsor added to session' });
@@ -1529,7 +1531,7 @@ app.post('/api/scan', async (req, res) => {
     // If not a sponsor, check as a visitor
     let registrationResult = await query(
       'SELECT id FROM event_registrations WHERE payment_id = ? AND payment_status = "SUCCESS"',
-      [scan_id]
+       [scan_id]
     );
     const registration = Array.isArray(registrationResult) ? registrationResult : registrationResult ? [registrationResult] : [];
 
@@ -1560,7 +1562,7 @@ app.post('/api/scan', async (req, res) => {
     return res.status(200).json({ message: 'visitor added to session' });
   } catch (error) {
     console.error('Error in scan API:', error);
-    return res.status(500).json({ error: 'Internal server error', details: error.message });
+    return res.status(500).json({ error: 'Internal  Internal server error', details: error.message });
   }
 });
 
