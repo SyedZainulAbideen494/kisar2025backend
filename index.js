@@ -1507,7 +1507,7 @@ app.post('/api/scan', async (req, res) => {
           // Check if sponsor exists in event_sponsors
           let sponsorsResult = await query(
               'SELECT id FROM event_sponsors WHERE id = ?',
-              [scan_id]
+              [parsedScanId]
           );
           
           // Normalize result to array
