@@ -1477,6 +1477,107 @@ app.get('/api/sponsors', async (req, res) => {
   }
 });
 
+app.post('/api/scan', async (req, res) => {
+  const { scan_id } = req.body;
+  
+  if (!scan_id) {
+      return res.status(400).json({ error: 'scan_id is required' });
+  }
+
+  let connection;
+  try {
+
+      // Check for active session
+      const [sessions] = await query(
+          'SELECT id FROM sessions WHERE is_active = 1 LIMIT 1'
+      );
+
+      if (sessions.length === 0) {
+          return res.status(400).json({ error: 'no active session' });
+      }
+
+      const sessionId = sessions[0].id;
+
+      // Try to parse scan_id as integer
+      const parsedScanId = parseInt(scan_id);
+
+      if (!isNaN(parsedScanId)) {
+          // Handle sponsor case
+          const [sponsorAttendance] = await query(
+              'SELECT id FROM session_sponsor_attend WHERE session_id = ? AND sponsor_id = ?',
+              [sessionId, scan_id]
+          );
+
+          if (sponsorAttendance.length > 0) {
+              return res.status(400).json({ error: 'Sponsor already present' });
+          }
+
+          // Add sponsor attendance
+          await query(
+              'INSERT INTO session_sponsor_attend (session_id, sponsor_id) VALUES (?, ?)',
+              [sessionId, scan_id]
+          );
+
+          return res.status(200).json({ message: 'sponsor added to session' });
+      } else {
+          // Handle visitor case
+          const [registration] = await query(
+              'SELECT id FROM event_registrations WHERE payment_id = ?',
+              [scan_id]
+          );
+
+          if (registration.length === 0) {
+              return res.status(404).json({ error: 'Registration not found' });
+          }
+
+          const registrationId = registration[0].id;
+
+          // Check if visitor already attended
+          const [attendance] = await query(
+              'SELECT id FROM session_attendance WHERE session_id = ? AND registration_id = ?',
+              [sessionId, registrationId]
+          );
+
+          if (attendance.length > 0) {
+              return res.status(400).json({ error: 'visitor already present' });
+          }
+
+          // Add visitor attendance
+          await query(
+              'INSERT INTO session_attendance (session_id, registration_id) VALUES (?, ?)',
+              [sessionId, registrationId]
+          );
+
+          return res.status(200).json({ message: 'visitor added to session' });
+      }
+  } catch (error) {
+      console.error('Error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/search-payment/:searchTerm', async (req, res) => {
+  const { searchTerm } = req.params;
+  
+  if (!searchTerm || searchTerm.length < 3) {
+      return res.status(400).json({ error: 'Search term must be at least 3 characters' });
+  }
+
+  try {
+      // Search for payment_id
+      const [results] = await query(
+          'SELECT payment_id FROM event_registrations WHERE payment_id LIKE ?',
+          [`%${searchTerm}%`]
+      );
+
+      return res.status(200).json({ payment_ids: results.map(row => row.payment_id) });
+  } catch (error) {
+      console.error('Error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+
 
 // Start the server
 app.listen(PORT, () => {
