@@ -1509,6 +1509,10 @@ app.post('/api/scan', async (req, res) => {
               [sessionId, scan_id]
           );
 
+          if(sponsorAttendance){
+            return res.status(400).json({ error: 'Sponsor already present' });
+          }
+
           if (sponsorAttendance.length > 0) {
               return res.status(400).json({ error: 'Sponsor already present' });
           }
@@ -1523,21 +1527,29 @@ app.post('/api/scan', async (req, res) => {
       } else {
           // Handle visitor case
           const [registration] = await query(
-              'SELECT id FROM event_registrations WHERE payment_id = ?',
+              'SELECT id FROM event_registrations WHERE payment_id = ? AND payment_status = "SUCCESS"',
               [scan_id]
           );
+
+          if(!registration){
+            return res.status(400).json({ error: 'No registration found' });
+          }
 
           if (registration.length === 0) {
               return res.status(404).json({ error: 'Registration not found' });
           }
 
-          const registrationId = registration[0].id;
+          const registrationId = registration?.id;
 
           // Check if visitor already attended
           const [attendance] = await query(
               'SELECT id FROM session_attendance WHERE session_id = ? AND registration_id = ?',
               [sessionId, registrationId]
           );
+
+          if(attendance){
+            return res.status(400).json({ error: 'visitor already present' });
+          }
 
           if (attendance.length > 0) {
               return res.status(400).json({ error: 'visitor already present' });
