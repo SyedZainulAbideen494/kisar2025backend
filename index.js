@@ -1363,7 +1363,7 @@ app.get('/api/sessions/:id/attendees', async (req, res) => {
 
   try {
     // Fetch regular attendees
-    const attendees = await query(`
+    let attendeesResult = await query(`
       SELECT 
         sa.registration_id,
         sa.timestamp,
@@ -1373,12 +1373,13 @@ app.get('/api/sessions/:id/attendees', async (req, res) => {
         er.last_name,
         er.email
       FROM session_attendance sa
-      JOIN event_registrations er ON sa.registration_id = er.payment_id
+      JOIN event_registrations er ON sa.registration_id = er.id
       WHERE sa.session_id = ?
     `, [id]);
+    const attendees = Array.isArray(attendeesResult) ? attendeesResult : attendeesResult ? [attendeesResult] : [];
 
     // Fetch sponsor attendees
-    const sponsors = await query(`
+    let sponsorsResult = await query(`
       SELECT 
         ssa.sponsor_id,
         ssa.login_time,
@@ -1387,9 +1388,10 @@ app.get('/api/sessions/:id/attendees', async (req, res) => {
         es.phone,
         es.organization
       FROM session_sponsor_attend ssa
-      JOIN event_sponsors es ON ssa.sponsor_id = es.reference_id
+      JOIN event_sponsors es ON ssa.sponsor_id = es.id
       WHERE ssa.session_id = ?
     `, [id]);
+    const sponsors = Array.isArray(sponsorsResult) ? sponsorsResult : sponsorsResult ? [sponsorsResult] : [];
 
     res.json({
       attendee_count: attendees.length,
@@ -1397,10 +1399,9 @@ app.get('/api/sessions/:id/attendees', async (req, res) => {
       attendees,
       sponsors
     });
-
   } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
+    console.error('Error in attendees API:', err);
+    res.status(500).json({ error: 'Internal server error', details: err.message });
   }
 });
 
