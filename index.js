@@ -1484,40 +1484,52 @@ app.post('/api/scan', async (req, res) => {
       return res.status(400).json({ error: 'scan_id is required' });
   }
 
-  let connection;
   try {
-
       // Check for active session
-      const [sessions] = await query(
+      let sessionsResult = await query(
           'SELECT id FROM sessions WHERE is_active = 1 LIMIT 1'
       );
+      
+      // Normalize result to array
+      const sessions = Array.isArray(sessionsResult) ? sessionsResult : sessionsResult ? [sessionsResult] : [];
 
-      console.log(sessions);
-
-      if(!sessions){
-        return res.status(400).json({ error: 'no active session' });
+      if (sessions.length === 0) {
+          console.error('No active session found:', sessionsResult);
+          return res.status(400).json({ error: 'no active session' });
       }
 
-      
-      const sessionId = sessions.id;
+      const sessionId = sessions[0].id;
 
       // Try to parse scan_id as integer
       const parsedScanId = parseInt(scan_id);
 
       if (!isNaN(parsedScanId)) {
+          // Check if sponsor exists in event_sponsors
+          let sponsorsResult = await query(
+              'SELECT id FROM event_sponsors WHERE id = ?',
+              [scan_id]
+          );
+          
+          // Normalize result to array
+          const sponsors = Array.isArray(sponsorsResult) ? sponsorsResult : sponsorsResult ? [sponsorsResult] : [];
+
+          if (sponsors.length === 0) {
+              console.error('Sponsor not found:', sponsorsResult);
+              return res.status(404).json({ error: 'Sponsor not found' });
+          }
+
           // Handle sponsor case
-          const [sponsorAttendance] = await query(
+          let sponsorAttendanceResult = await query(
               'SELECT id FROM session_sponsor_attend WHERE session_id = ? AND sponsor_id = ?',
               [sessionId, scan_id]
           );
-
-          if(sponsorAttendance){
-            if (sponsorAttendance.length > 0) {
-              return res.status(400).json({ error: 'Sponsor already present' });
-            }
-          }
-
           
+          // Normalize result to array
+          const sponsorAttendance = Array.isArray(sponsorAttendanceResult) ? sponsorAttendanceResult : sponsorAttendanceResult ? [sponsorAttendanceResult] : [];
+
+          if (sponsorAttendance.length > 0) {
+              return res.status(400).json({ error: 'Sponsor already present' });
+          }
 
           // Add sponsor attendance
           await query(
@@ -1528,30 +1540,29 @@ app.post('/api/scan', async (req, res) => {
           return res.status(200).json({ message: 'sponsor added to session' });
       } else {
           // Handle visitor case
-          const [registration] = await query(
+          let registrationResult = await query(
               'SELECT id FROM event_registrations WHERE payment_id = ? AND payment_status = "SUCCESS"',
               [scan_id]
           );
-
-          if(!registration){
-            return res.status(400).json({ error: 'No registration found' });
-          }
+          
+          // Normalize result to array
+          const registration = Array.isArray(registrationResult) ? registrationResult : registrationResult ? [registrationResult] : [];
 
           if (registration.length === 0) {
+              console.error('Registration not found:', registrationResult);
               return res.status(404).json({ error: 'Registration not found' });
           }
 
-          const registrationId = registration?.id;
+          const registrationId = registration[0].id;
 
           // Check if visitor already attended
-          const [attendance] = await query(
+          let attendanceResult = await query(
               'SELECT id FROM session_attendance WHERE session_id = ? AND registration_id = ?',
               [sessionId, registrationId]
           );
-
-          if(attendance){
-            return res.status(400).json({ error: 'visitor already present' });
-          }
+          
+          // Normalize result to array
+          const attendance = Array.isArray(attendanceResult) ? attendanceResult : attendanceResult ? [attendanceResult] : [];
 
           if (attendance.length > 0) {
               return res.status(400).json({ error: 'visitor already present' });
@@ -1566,8 +1577,8 @@ app.post('/api/scan', async (req, res) => {
           return res.status(200).json({ message: 'visitor added to session' });
       }
   } catch (error) {
-      console.error('Error:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      console.error('Error in scan API:', error);
+      return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
 
