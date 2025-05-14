@@ -1571,20 +1571,28 @@ app.get('/api/search-payment/:searchTerm', async (req, res) => {
   const { searchTerm } = req.params;
   
   if (!searchTerm || searchTerm.length < 3) {
-      return res.status(400).json({ error: 'Search term must be at least 3 characters' });
+    return res.status(400).json({ error: 'Search term must be at least 3 characters' });
   }
 
   try {
-      // Search for payment_id
-      const [results] = await query(
-          'SELECT payment_id FROM event_registrations WHERE payment_id LIKE ?',
-          [`%${searchTerm}%`]
-      );
+    // Search for payment_id
+    let results = await query(
+      'SELECT payment_id FROM event_registrations WHERE payment_id LIKE ?',
+      [`%${searchTerm}%`]
+    );
 
-      return res.status(200).json({ payment_ids: results.map(row => row.payment_id) });
+    // Normalize result to array
+    results = Array.isArray(results) ? results : results ? [results] : [];
+
+    // Log for debugging if no results
+    if (results.length === 0) {
+      console.log(`No payment_ids found for searchTerm: ${searchTerm}`, results);
+    }
+
+    return res.status(200).json({ payment_ids: results.map(row => row.payment_id) });
   } catch (error) {
-      console.error('Error:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+    console.error('Error in search-payment API:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
 
