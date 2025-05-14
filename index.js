@@ -1479,106 +1479,88 @@ app.get('/api/sponsors', async (req, res) => {
 
 app.post('/api/scan', async (req, res) => {
   const { scan_id } = req.body;
-  
+
   if (!scan_id) {
-      return res.status(400).json({ error: 'scan_id is required' });
+    return res.status(400).json({ error: 'scan_id is required' });
   }
 
   try {
-      // Check for active session
-      let sessionsResult = await query(
-          'SELECT id FROM sessions WHERE is_active = 1 LIMIT 1'
+    // Check for active session
+    let sessionsResult = await query(
+      'SELECT id FROM sessions WHERE is_active = 1 LIMIT 1'
+    );
+    const sessions = Array.isArray(sessionsResult) ? sessionsResult : sessionsResult ? [sessionsResult] : [];
+
+    if (sessions.length === 0) {
+      console.error('No active session found:', sessionsResult);
+      return res.status(400).json({ error: 'no active session' });
+    }
+
+    const sessionId = sessions[0].id;
+
+    // Check if scan_id exists as a sponsor in event_sponsors
+    let sponsorsResult = await query(
+      'SELECT id FROM event_sponsors WHERE id = ?',
+      [scan_id]
+    );
+    const sponsors = Array.isArray(sponsorsResult) ? sponsorsResult : sponsorsResult ? [sponsorsResult] : [];
+
+    if (sponsors.length > 0) {
+      // Handle sponsor case
+      let sponsorAttendanceResult = await query(
+        'SELECT id FROM session_sponsor_attend WHERE session_id = ? AND sponsor_id = ?',
+        [sessionId, scan_id]
       );
-      
-      // Normalize result to array
-      const sessions = Array.isArray(sessionsResult) ? sessionsResult : sessionsResult ? [sessionsResult] : [];
+      const sponsorAttendance = Array.isArray(sponsorAttendanceResult) ? sponsorAttendanceResult : sponsorAttendanceResult ? [sponsorAttendanceResult] : [];
 
-      if (sessions.length === 0) {
-          console.error('No active session found:', sessionsResult);
-          return res.status(400).json({ error: 'no active session' });
+      if (sponsorAttendance.length > 0) {
+        return res.status(400).json({ error: 'Sponsor already present' });
       }
 
-      const sessionId = sessions[0].id;
+      // Add sponsor attendance
+      await query(
+        'INSERT INTO session_sponsor_attend (session_id, sponsor_id) VALUES (?, ?)',
+        [sessionId, scan_id]
+      );
 
-      // Try to parse scan_id as integer
-      const parsedScanId = parseInt(scan_id);
+      return res.status(200).json({ message: 'sponsor added to session' });
+    }
 
-      if (!isNaN(parsedScanId)) {
-          // Check if sponsor exists in event_sponsors
-          let sponsorsResult = await query(
-              'SELECT id FROM event_sponsors WHERE id = ?',
-              [parsedScanId]
-          );
-          
-          // Normalize result to array
-          const sponsors = Array.isArray(sponsorsResult) ? sponsorsResult : sponsorsResult ? [sponsorsResult] : [];
+    // If not a sponsor, check as a visitor
+    let registrationResult = await query(
+      'SELECT id FROM event_registrations WHERE payment_id = ? AND payment_status = "SUCCESS"',
+      [scan_id]
+    );
+    const registration = Array.isArray(registrationResult) ? registrationResult : registrationResult ? [registrationResult] : [];
 
-          if (sponsors.length === 0) {
-              console.error('Sponsor not found:', sponsorsResult);
-              return res.status(404).json({ error: 'Sponsor not found' });
-          }
+    if (registration.length === 0) {
+      console.error('Neither sponsor nor registration found for scan_id:', scan_id);
+      return res.status(404).json({ error: 'Neither sponsor nor valid registration found' });
+    }
 
-          // Handle sponsor case
-          let sponsorAttendanceResult = await query(
-              'SELECT id FROM session_sponsor_attend WHERE session_id = ? AND sponsor_id = ?',
-              [sessionId, scan_id]
-          );
-          
-          // Normalize result to array
-          const sponsorAttendance = Array.isArray(sponsorAttendanceResult) ? sponsorAttendanceResult : sponsorAttendanceResult ? [sponsorAttendanceResult] : [];
+    const registrationId = registration[0].id;
 
-          if (sponsorAttendance.length > 0) {
-              return res.status(400).json({ error: 'Sponsor already present' });
-          }
+    // Check if visitor already attended
+    let attendanceResult = await query(
+      'SELECT id FROM session_attendance WHERE session_id = ? AND registration_id = ?',
+      [sessionId, registrationId]
+    );
+    const attendance = Array.isArray(attendanceResult) ? attendanceResult : attendanceResult ? [attendanceResult] : [];
 
-          // Add sponsor attendance
-          await query(
-              'INSERT INTO session_sponsor_attend (session_id, sponsor_id) VALUES (?, ?)',
-              [sessionId, scan_id]
-          );
+    if (attendance.length > 0) {
+      return res.status(400).json({ error: 'visitor already present' });
+    }
 
-          return res.status(200).json({ message: 'sponsor added to session' });
-      } else {
-          // Handle visitor case
-          let registrationResult = await query(
-              'SELECT id FROM event_registrations WHERE payment_id = ? AND payment_status = "SUCCESS"',
-              [scan_id]
-          );
-          
-          // Normalize result to array
-          const registration = Array.isArray(registrationResult) ? registrationResult : registrationResult ? [registrationResult] : [];
+    // Add visitor attendance
+    await query(
+      'INSERT INTO session_attendance (session_id, registration_id) VALUES (?, ?)',
+      [sessionId, registrationId]
+    );
 
-          if (registration.length === 0) {
-              console.error('Registration not found:', registrationResult);
-              return res.status(404).json({ error: 'Registration not found' });
-          }
-
-          const registrationId = registration[0].id;
-
-          // Check if visitor already attended
-          let attendanceResult = await query(
-              'SELECT id FROM session_attendance WHERE session_id = ? AND registration_id = ?',
-              [sessionId, registrationId]
-          );
-          
-          // Normalize result to array
-          const attendance = Array.isArray(attendanceResult) ? attendanceResult : attendanceResult ? [attendanceResult] : [];
-
-          if (attendance.length > 0) {
-              return res.status(400).json({ error: 'visitor already present' });
-          }
-
-          // Add visitor attendance
-          await query(
-              'INSERT INTO session_attendance (session_id, registration_id) VALUES (?, ?)',
-              [sessionId, registrationId]
-          );
-
-          return res.status(200).json({ message: 'visitor added to session' });
-      }
+    return res.status(200).json({ message: 'visitor added to session' });
   } catch (error) {
-      console.error('Error in scan API:', error);
-      return res.status(500).json({ error: 'Internal server error', details: error.message });
+    console.error('Error in scan API:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error.message });
   }
 });
 
