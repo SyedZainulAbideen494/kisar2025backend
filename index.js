@@ -1493,14 +1493,11 @@ app.post('/api/scan', async (req, res) => {
       );
 
       if(!sessions){
-        return res.status(400).json({ error: 'no ession data found' });
+        return res.status(400).json({ error: 'no active session' });
       }
 
-      if (sessions.length === 0) {
-          return res.status(400).json({ error: 'no active session' });
-      }
-
-      const sessionId = sessions[0].id;
+      
+      const sessionId = sessions.id;
 
       // Try to parse scan_id as integer
       const parsedScanId = parseInt(scan_id);
