@@ -1484,16 +1484,16 @@ app.post('/api/scan', async (req, res) => {
       return res.status(400).json({ error: 'scan_id is required' });
   }
 
+  let connection;
   try {
+
       // Check for active session
       const [sessions] = await query(
           'SELECT id FROM sessions WHERE is_active = 1 LIMIT 1'
       );
 
-      // Verify sessions is an array
-      if (!Array.isArray(sessions)) {
-          console.error('Sessions query returned unexpected format:', sessions);
-          return res.status(500).json({ error: 'Internal server error: Invalid session data' });
+      if(!sessions){
+        return res.status(400).json({ error: 'no ession data found' });
       }
 
       if (sessions.length === 0) {
@@ -1511,12 +1511,6 @@ app.post('/api/scan', async (req, res) => {
               'SELECT id FROM session_sponsor_attend WHERE session_id = ? AND sponsor_id = ?',
               [sessionId, scan_id]
           );
-
-          // Verify sponsorAttendance is an array
-          if (!Array.isArray(sponsorAttendance)) {
-              console.error('Sponsor attendance query returned unexpected format:', sponsorAttendance);
-              return res.status(500).json({ error: 'Internal server error: Invalid sponsor data' });
-          }
 
           if (sponsorAttendance.length > 0) {
               return res.status(400).json({ error: 'Sponsor already present' });
@@ -1536,12 +1530,6 @@ app.post('/api/scan', async (req, res) => {
               [scan_id]
           );
 
-          // Verify registration is an array
-          if (!Array.isArray(registration)) {
-              console.error('Registration query returned unexpected format:', registration);
-              return res.status(500).json({ error: 'Internal server error: Invalid registration data' });
-          }
-
           if (registration.length === 0) {
               return res.status(404).json({ error: 'Registration not found' });
           }
@@ -1553,12 +1541,6 @@ app.post('/api/scan', async (req, res) => {
               'SELECT id FROM session_attendance WHERE session_id = ? AND registration_id = ?',
               [sessionId, registrationId]
           );
-
-          // Verify attendance is an array
-          if (!Array.isArray(attendance)) {
-              console.error('Attendance query returned unexpected format:', attendance);
-              return res.status(500).json({ error: 'Internal server error: Invalid attendance data' });
-          }
 
           if (attendance.length > 0) {
               return res.status(400).json({ error: 'visitor already present' });
@@ -1573,8 +1555,8 @@ app.post('/api/scan', async (req, res) => {
           return res.status(200).json({ message: 'visitor added to session' });
       }
   } catch (error) {
-      console.error('Error in scan API:', error);
-      return res.status(500).json({ error: 'Internal server error', details: error.message });
+      console.error('Error:', error);
+      return res.status(500).json({ error: 'Internal server error' });
   }
 });
 
