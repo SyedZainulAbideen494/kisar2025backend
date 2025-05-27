@@ -6,6 +6,8 @@ import os
 import smtplib
 from email.mime.text import MIMEText
 import html
+from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
 
 app = FastAPI()
 
@@ -467,6 +469,104 @@ async def generate_upgrade_invoice(request: UpgradeInvoiceRequest):
     except Exception as e:
         print(f"Error generating upgrade invoice: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to generate upgrade invoice")
+
+class CertificateData(BaseModel):
+    role: str
+    fullName: str
+    medicalCouncilNumber: str
+    medicalCouncilState: str
+    city: str
+
+@app.post("/api/generate-certificate")
+async def generate_certificate(data: CertificateData):
+    try:
+        # Select the template based on role
+        template_path = "template/faculty.png" if data.role == "Faculty" else "template/delegate.png"
+
+        # Verify template exists
+        if not os.path.exists(template_path):
+            raise HTTPException(status_code=404, detail=f"Template {template_path} not found")
+
+        # Open the image
+        image = Image.open(template_path)
+        draw = ImageDraw.Draw(image)
+
+        # Use a default font (Pillow doesn't bundle fonts, so use a system font or provide a path to a .ttf file)
+        try:
+            font = ImageFont.truetype("apercumovistarbold.ttf", 50)
+            smaller_font = ImageFont.truetype("apercumovistarbold.ttf", 30)  # Smaller font for adjustments
+        except IOError:
+            # Fallback to default font if Arial is not available
+            font = ImageFont.load_default()
+            smaller_font = ImageFont.load_default()  # Fallback won't support size change, but included for completeness
+
+        # Remove trailing spaces and convert all data to uppercase
+        full_name_upper = data.fullName.strip().upper()
+        medical_council_number_upper = data.medicalCouncilNumber.strip().upper()
+        medical_council_state_upper = data.medicalCouncilState.strip().upper()
+        city_upper = data.city.strip().upper()
+
+        # Full Name: 100px below top, centered (unchanged as it fits perfectly)
+        full_name_bbox = draw.textbbox((0, 0), full_name_upper, font=font)
+        full_name_width = full_name_bbox[2] - full_name_bbox[0]
+        image_width = image.width
+        full_name_x = (image_width - full_name_width) // 2
+        draw.text((full_name_x, 640), full_name_upper, fill="black", font=font)
+
+        # Medical Council Number (left) and State (right) on the next line
+        # Medical Council Number: Check length and split if too long
+        medical_council_bbox = draw.textbbox((0, 0), medical_council_number_upper, font=font)
+        medical_council_width = medical_council_bbox[2] - medical_council_bbox[0]
+        max_medical_council_width = 200  # Adjust this based on available space (estimated for x=900 to fit before state)
+
+        if medical_council_width > max_medical_council_width:
+            # Use smaller font and split into two lines
+            medical_council_font = smaller_font
+            # Split the medical council number roughly in half
+            split_index = len(medical_council_number_upper) // 2
+            part1 = medical_council_number_upper[:split_index]
+            part2 = medical_council_number_upper[split_index:]
+            # Draw the two parts one below the other
+            part1_bbox = draw.textbbox((0, 0), part1, font=medical_council_font)
+            part1_width = part1_bbox[2] - part1_bbox[0]
+            draw.text((900, 730), part1, fill="black", font=medical_council_font)
+            draw.text((900, 770), part2, fill="black", font=medical_council_font)
+        else:
+            # Use original font and draw in one line
+            draw.text((900, 750), medical_council_number_upper, fill="black", font=font)
+
+        # State (right): Reduce font size for longer lengths
+        state_bbox = draw.textbbox((0, 0), medical_council_state_upper, font=font)
+        state_width = state_bbox[2] - state_bbox[0]
+        max_state_width = 300  # Adjust this based on available space (estimated for x=1250)
+
+        state_font = smaller_font if state_width > max_state_width else font
+        # Recalculate bbox with the chosen font
+        state_bbox = draw.textbbox((0, 0), medical_council_state_upper, font=state_font)
+        state_width = state_bbox[2] - state_bbox[0]
+        state_x = 1250
+        draw.text((state_x, 750), medical_council_state_upper, fill="black", font=state_font)
+
+        # City: Reduce font size for longer lengths and adjust x-coordinate if smaller font is used
+        city_bbox = draw.textbbox((0, 0), city_upper, font=font)
+        city_width = city_bbox[2] - city_bbox[0]
+        max_city_width = 600  # Adjust this based on available space (estimated for centered text)
+
+        city_font = smaller_font if city_width > max_city_width else font
+        # Recalculate bbox with the chosen font
+        city_bbox = draw.textbbox((0, 0), city_upper, font=city_font)
+        city_width = city_bbox[2] - city_bbox[0]
+        # Adjust x-coordinate to 650 if smaller font is used, otherwise keep at 700
+        city_x = 650 if city_font == smaller_font else 700
+        draw.text((city_x, 850), city_upper, fill="black", font=city_font)
+
+        # Save the modified image
+        output_filename = f"{full_name_upper}.png"
+        image.save("certificates/" + output_filename)
+
+        return {"message": "Certificate generated successfully", "output": output_filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating certificate: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn
