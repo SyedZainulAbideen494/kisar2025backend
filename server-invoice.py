@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from docx import Document
 from num2words import num2words
@@ -496,11 +497,16 @@ async def generate_certificate(data: CertificateData):
             font = ImageFont.truetype("apercumovistarbold.ttf", 50)
             smaller_font = ImageFont.truetype("apercumovistarbold.ttf", 30)  # Smaller font for adjustments
         except IOError:
-            # Fallback to default font if Arial is not available
+            # Fallback to default font if not available
             font = ImageFont.load_default()
             smaller_font = ImageFont.load_default()  # Fallback won't support size change, but included for completeness
 
         # Remove trailing spaces and convert all data to uppercase
+        full_name_upper = data.fullName.strip().upper()
+        medical_council_number_upper = data.medicalCouncilNumber.strip().upper()
+        medical_council_state_upper = data.medicalCouncilState.strip().upper()
+
+        # Convert all data to uppercase
         full_name_upper = data.fullName.strip().upper()
         medical_council_number_upper = data.medicalCouncilNumber.strip().upper()
         medical_council_state_upper = data.medicalCouncilState.strip().upper()
@@ -560,11 +566,20 @@ async def generate_certificate(data: CertificateData):
         city_x = 650 if city_font == smaller_font else 700
         draw.text((city_x, 850), city_upper, fill="black", font=city_font)
 
-        # Save the modified image
-        output_filename = f"{full_name_upper}.png"
-        image.save("certificates/" + output_filename)
+        # Ensure the certificates directory exists
+        os.makedirs("certificates", exist_ok=True)
 
-        return {"message": "Certificate generated successfully", "output": output_filename}
+        # Save the modified image as a PDF
+        output_filename = f"certificates/{full_name_upper}.pdf"
+        image.save(output_filename, "PDF", resolution=100.0)
+
+        # Return the PDF file as a response for download
+        return FileResponse(
+            path=output_filename,
+            filename=f"{full_name_upper}.pdf",
+            media_type="application/pdf",
+            headers={"Content-Disposition": f"attachment; filename={full_name_upper}.pdf"}
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error generating certificate: {str(e)}")
 
